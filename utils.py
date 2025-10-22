@@ -1,3 +1,12 @@
+"""
+最原始、最简单的 Playwright 使用方案
+不做任何伪装、不设置头部、不注入 JavaScript
+不保存/加载 Cookie，完全独立的浏览器会话
+完全模拟真实用户使用浏览器的行为
+
+这是完整的 utils.py 替代版本，包含所有必要的函数
+"""
+
 import json
 import os
 from pathlib import Path
@@ -45,7 +54,7 @@ def requests_with_retry(url, headers=HEADERS, timeout=20, retry=5, ignore_proxy=
             if i == 1 and ignore_proxy:
                 continue
             if i < retry:
-                wait_time = min(10 * i, 30)  # 最多等待30秒
+                wait_time = min(10 * i, 30)
                 print(f"    ⚠ 请求失败 (尝试 {i}/{retry}): {str(e)[:80]}")
                 print(f"    ⏳ {wait_time}秒后重试...")
                 time.sleep(wait_time)
@@ -57,7 +66,7 @@ def requests_with_retry(url, headers=HEADERS, timeout=20, retry=5, ignore_proxy=
             return response
         else:
             if i < retry:
-                wait_time = min(10 * i, 30)  # 最多等待30秒
+                wait_time = min(10 * i, 30)
                 print(f"    ⚠ HTTP错误 (尝试 {i}/{retry}): 状态码 {response.status_code}")
                 print(f"    ⏳ {wait_time}秒后重试...")
                 time.sleep(wait_time)
@@ -74,7 +83,6 @@ def scrapingant_requests_get(url, retry=5) -> str:
             print("Use local Playwright as a replacement.\n")
         print("  [Playwright] 正在获取视频页面信息...")
         return get_response_from_playwright(url)
-        exit(1)
 
     query_param = {
         "timeout": 180
@@ -114,7 +122,9 @@ def update_video_ids_cache(data):
 
 
 def get_local_video_list(path="./"):
-    re_extractor = re.compile(r"[a-zA-Z0-9]{2,}-\d{3,}")
+    # 修正正则：匹配完整的视频 ID，包括所有后缀
+    # 格式: 字母数字-数字-字母(可选)，例如 ssni-301-c, abc-123, xyz-456-d
+    re_extractor = re.compile(r"[a-zA-Z0-9]{2,}-\d{3,}(?:-[a-zA-Z0-9]+)?")
 
     def extract_movie_id(full_name):
         foo = re_extractor.search(full_name)
@@ -130,372 +140,169 @@ def get_local_video_list(path="./"):
     return result
 
 
-def get_response_from_playwright(url, retry=3):
+def get_response_from_playwright_simple(url, retry=3):
     """
-    使用 Playwright 获取网页内容，替代 chromedp
-    包含完整的浏览器头部模拟和 Cookie 持久化
+    最原始的 Playwright 使用方案
+
+    原则：
+    - 不设置任何额外的 HTTP 头部（除了 Referer 用于分页导航）
+    - 不注入任何 JavaScript 代码
+    - 不做任何浏览器指纹伪装
+    - 不强制设置 User-Agent
+    - 不保存/加载 Cookie，每次都是全新会话
+    - 让浏览器完全按照默认行为运行
+    - 唯一做的：使用系统浏览器（如果配置了）
 
     Args:
-        url: 目标URL
+        url: 目标 URL
         retry: 重试次数
 
     Returns:
-        str: 网页HTML内容
+        str: 网页 HTML 内容
     """
     from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-    import random
-    import platform
 
     proxy = CONF.get('proxies', {}).get('http', None)
-
-    # 自动检测操作系统并适配平台名称
-    system = platform.system()
-    if system == 'Linux':
-        platform_name = 'Linux'
-        nav_platform = 'Linux x86_64'
-    elif system == 'Darwin':
-        platform_name = 'macOS'
-        nav_platform = 'MacIntel'
-    elif system == 'Windows':
-        platform_name = 'Windows'
-        nav_platform = 'Win32'
-    else:
-        platform_name = 'Linux'
-        nav_platform = 'Linux x86_64'
-
-    # 读取配置：是否使用无头模式
     headless_mode = CONF.get('playwright_headless', True)
-
-    # Cookie 持久化文件
-    cookie_file = '.jable_cookies.json'
+    system_chrome_path = CONF.get('chrome_path', None)
 
     for attempt in range(1, retry + 1):
         try:
             with sync_playwright() as p:
-                # 配置浏览器启动参数
-                # 添加参数来降低被 Cloudflare 检测的风险
+                # 最简单的启动配置
                 launch_options = {
-                    'headless': headless_mode,  # 从配置读取
-                    'timeout': 60000,
-                    'args': [
-                        '--disable-blink-features=AutomationControlled',  # 禁用自动化特征
-                        '--no-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-web-security',  # 禁用同源策略限制
-                        '--disable-features=IsolateOrigins,site-per-process',
-                    ]
+                    'headless': headless_mode,
                 }
 
-                # 检查是否使用系统浏览器
-                system_chrome_path = CONF.get('chrome_path', None)
+                # 如果配置了系统浏览器，使用系统浏览器
                 if system_chrome_path and os.path.exists(system_chrome_path):
                     launch_options['executable_path'] = system_chrome_path
                     if attempt == 1:
-                        print(f"  [Playwright] 使用系统浏览器: {system_chrome_path}")
-                elif system_chrome_path:
-                    if attempt == 1:
-                        print(f"  [Playwright] ⚠️  系统浏览器路径无效: {system_chrome_path}")
-                        print(f"  [Playwright] 使用 Playwright 默认浏览器")
+                        print(f"  [Simple] 使用系统浏览器: {system_chrome_path}")
 
                 # 启动浏览器
                 if attempt == 1:
-                    mode_text = "无头模式" if headless_mode else "有头模式（可见窗口）"
-                    print(f"  [Playwright] 启动浏览器 ({mode_text})...")
-                    print(f"  [Playwright] 检测到操作系统: {system} → 使用 {platform_name} 平台特征")
+                    mode_text = "无头模式" if headless_mode else "有头模式"
+                    print(f"  [Simple] 启动浏览器 ({mode_text})...")
+                    print(f"  [Simple] 原始模式：不做任何伪装")
+
                 browser = p.chromium.launch(**launch_options)
 
-                # 获取真实的浏览器版本号
-                browser_version = browser.version
                 if attempt == 1:
-                    print(f"  [Playwright] 浏览器版本: {browser_version}")
-                    print("  [Playwright] 浏览器启动成功，正在加载页面...")
+                    print(f"  [Simple] 浏览器版本: {browser.version}")
 
                 try:
-                    # 随机视口大小（模拟不同用户的屏幕）
-                    viewport_width = random.randint(1366, 1920)
-                    viewport_height = random.randint(768, 1080)
+                    # 最简单的上下文配置 - 只配置代理
+                    context_options = {}
 
-                    # 根据操作系统和浏览器版本构建正确的 User-Agent
-                    if system == 'Linux':
-                        user_agent = f'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browser_version} Safari/537.36'
-                    elif system == 'Darwin':
-                        user_agent = f'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browser_version} Safari/537.36'
-                    elif system == 'Windows':
-                        user_agent = f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browser_version} Safari/537.36'
-                    else:
-                        user_agent = f'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browser_version} Safari/537.36'
-
-                    if attempt == 1:
-                        print(f"  [Playwright] User-Agent: ... Chrome/{browser_version} ...")
-
-                    # 创建浏览器上下文
-                    context_options = {
-                        'user_agent': user_agent,  # 使用真实的完整版本号
-                        'viewport': {'width': viewport_width, 'height': viewport_height},
-                        'ignore_https_errors': True,
-                        # 添加额外的浏览器特征来模拟真实用户
-                        'locale': 'zh-TW',  # 台湾中文
-                        'timezone_id': 'Asia/Taipei',
-                        # 设置设备缩放因子
-                        'device_scale_factor': 1,
-                        # 启用 JavaScript
-                        'java_script_enabled': True,
-                    }
-
-                    # 配置代理
                     if proxy:
                         context_options['proxy'] = {'server': proxy}
+                        if attempt == 1:
+                            print(f"  [Simple] 使用代理: {proxy}")
 
                     context = browser.new_context(**context_options)
 
-                    # 加载之前保存的 Cookie（如果存在）
-                    if os.path.exists(cookie_file):
-                        try:
-                            with open(cookie_file, 'r', encoding='utf-8') as f:
-                                cookies = json.load(f)
-                                if cookies:
-                                    context.add_cookies(cookies)
-                                    if attempt == 1:
-                                        print(f"  [Playwright] 加载了 {len(cookies)} 个已保存的 Cookie")
-                        except Exception as e:
-                            if attempt == 1:
-                                print(f"  [Playwright] Cookie 加载失败: {str(e)[:50]}")
+                    # 设置基础的 Referer（如果 URL 有参数）
+                    # 这样访问 ?from=1 时会带上 Referer，模拟真实的页面导航
+                    from urllib.parse import urlparse, parse_qs
+                    parsed = urlparse(url)
+                    if parsed.query:  # 如果有查询参数
+                        # 基础 URL（不带参数）作为 Referer
+                        base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                        context.set_extra_http_headers({
+                            'Referer': base_url
+                        })
+                        if attempt == 1:
+                            print(f"  [Simple] 设置 Referer: {base_url}")
 
-                    # 设置额外的 HTTP 头部，使用真实的浏览器版本号
-                    # 从 browser_version 中提取主版本号（如 130.0.6723.31 -> 130）
-                    major_version = browser_version.split('.')[0]
-
-                    extra_headers = {
-                        # Sec-Ch-Ua 系列（使用真实版本号）
-                        'sec-ch-ua': f'"Chromium";v="{major_version}", "Not_A Brand";v="24"',
-                        'sec-ch-ua-mobile': '?0',
-                        'sec-ch-ua-platform': f'"{platform_name}"',  # 自动适配：Linux/macOS/Windows
-                        # Sec-Fetch 系列（Fetch Metadata）
-                        'sec-fetch-dest': 'document',
-                        'sec-fetch-mode': 'navigate',
-                        'sec-fetch-site': 'none',
-                        'sec-fetch-user': '?1',
-                        # 其他标准头部
-                        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                        'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-                        'accept-encoding': 'gzip, deflate, br, zstd',
-                        'upgrade-insecure-requests': '1',
-                        'dnt': '1',  # Do Not Track
-                    }
-                    context.set_extra_http_headers(extra_headers)
-
-                    # 添加初始化脚本，隐藏 webdriver 特征和其他自动化痕迹
-                    context.add_init_script(f"""
-                        // 隐藏 webdriver
-                        Object.defineProperty(navigator, 'webdriver', {{
-                            get: () => undefined
-                        }});
-
-                        // 设置正确的 platform（与 HTTP 头部一致）
-                        Object.defineProperty(navigator, 'platform', {{
-                            get: () => '{nav_platform}'
-                        }});
-
-                        // 设置硬件信息（更真实）
-                        Object.defineProperty(navigator, 'hardwareConcurrency', {{
-                            get: () => 8  // 模拟 8 核 CPU
-                        }});
-
-                        Object.defineProperty(navigator, 'deviceMemory', {{
-                            get: () => 8  // 模拟 8GB 内存
-                        }});
-
-                        // 伪造 plugins
-                        Object.defineProperty(navigator, 'plugins', {{
-                            get: () => [1, 2, 3, 4, 5]
-                        }});
-
-                        // 设置语言
-                        Object.defineProperty(navigator, 'languages', {{
-                            get: () => ['zh-TW', 'zh', 'en-US', 'en']
-                        }});
-
-                        // 伪造 Chrome 对象
-                        window.chrome = {{
-                            runtime: {{}},
-                            loadTimes: function() {{}},
-                            csi: function() {{}},
-                            app: {{}}
-                        }};
-
-                        // 隐藏自动化相关属性
-                        Object.defineProperty(navigator, 'permissions', {{
-                            get: () => ({{
-                                query: () => Promise.resolve({{ state: 'granted' }})
-                            }})
-                        }});
-
-                        // 伪造 battery API
-                        Object.defineProperty(navigator, 'getBattery', {{
-                            get: () => () => Promise.resolve({{
-                                charging: true,
-                                chargingTime: 0,
-                                dischargingTime: Infinity,
-                                level: 1
-                            }})
-                        }});
-
-                        // 覆盖 toString 方法避免检测
-                        const originalQuery = window.navigator.permissions.query;
-                        window.navigator.permissions.query = (parameters) => (
-                            parameters.name === 'notifications' ?
-                                Promise.resolve({{ state: Notification.permission }}) :
-                                originalQuery(parameters)
-                        );
-
-                        // 伪造 connection
-                        Object.defineProperty(navigator, 'connection', {{
-                            get: () => ({{
-                                effectiveType: '4g',
-                                rtt: 50,
-                                downlink: 10,
-                                saveData: false
-                            }})
-                        }});
-
-                        // 隐藏 Playwright 特征
-                        delete navigator.__proto__.webdriver;
-                    """)
-
-                    # 创建新页面
+                    # 创建页面
                     page = context.new_page()
 
-                    # 访问目标URL - 使用 domcontentloaded，不等待所有网络请求
-                    # Cloudflare 页面会持续发送请求，networkidle 会超时
-                    page.goto(url, timeout=45000, wait_until='domcontentloaded')
+                    # 直接访问 URL - 不做任何额外操作
                     if attempt == 1:
-                        print("  [Playwright] 页面加载完成，正在解析...")
+                        print(f"  [Simple] 正在访问: {url}")
 
-                    # 模拟真实用户行为 - 随机移动鼠标
-                    try:
-                        # 随机移动鼠标到几个位置
-                        for _ in range(random.randint(2, 4)):
-                            x = random.randint(100, viewport_width - 100)
-                            y = random.randint(100, viewport_height - 100)
-                            page.mouse.move(x, y)
-                            page.wait_for_timeout(random.randint(100, 300))
-                    except:
-                        pass
+                    page.goto(url, timeout=60000)
 
-                    # 等待关键元素加载
-                    try:
-                        # 优先等待 #site-header
-                        page.wait_for_selector('#site-header', timeout=5000)
-                    except PlaywrightTimeoutError:
-                        pass
+                    # 等待页面加载完成
+                    if attempt == 1:
+                        print(f"  [Simple] 页面加载完成")
 
-                    # 额外等待确保动态内容加载
-                    # 对于演员页面，等待演员名称元素
-                    if '/models/' in url:
-                        try:
-                            # 等待演员名称加载
-                            page.wait_for_selector('h2.h3-md.mb-1', timeout=5000)
-                        except PlaywrightTimeoutError:
-                            # 如果还是没有，再等待一下
-                            page.wait_for_timeout(2000)
-
-                    # 对于视频页面，等待视频信息加载
-                    elif '/videos/' in url:
-                        try:
-                            page.wait_for_selector('.video-detail', timeout=5000)
-                        except PlaywrightTimeoutError:
-                            page.wait_for_timeout(1000)
-
-                    # 其他页面，短暂等待确保动态内容渲染
-                    else:
-                        page.wait_for_timeout(1000)
+                    # 简单等待一下确保内容加载
+                    page.wait_for_timeout(3000)
 
                     # 获取页面内容
                     html = page.content()
 
-                    # 保存 Cookie 供下次使用
-                    try:
-                        current_cookies = context.cookies()
-                        if current_cookies:
-                            with open(cookie_file, 'w', encoding='utf-8') as f:
-                                json.dump(current_cookies, f, ensure_ascii=False, indent=2)
-                            if attempt == 1:
-                                print(f"  [Playwright] 保存了 {len(current_cookies)} 个 Cookie 供下次使用")
-                    except Exception as e:
+                    # 检查是否遇到 Cloudflare
+                    if 'Just a moment' in html or 'Verify you are human' in html or '請稍候' in html:
                         if attempt == 1:
-                            print(f"  [Playwright] Cookie 保存失败: {str(e)[:50]}")
+                            print(f"  [Simple] 检测到 Cloudflare 验证页面")
 
-                    # 检查是否遇到 Cloudflare 验证页面
-                    if 'Just a moment' in html or 'Verify you are human' in html or '請稍候' in html or '請完成以下操作' in html:
+                        # 简单等待 - 不做任何模拟
                         if attempt == 1:
-                            print("  [Playwright] 检测到 Cloudflare 验证，等待通过...")
+                            print(f"  [Simple] 等待 Cloudflare 自动验证...")
 
-                        # 模拟人类等待 - 随机滚动和鼠标移动
-                        try:
-                            # 随机滚动页面
-                            for _ in range(random.randint(1, 3)):
-                                page.mouse.wheel(0, random.randint(100, 300))
-                                page.wait_for_timeout(random.randint(500, 1000))
-
-                            # 随机移动鼠标
-                            for _ in range(random.randint(2, 4)):
-                                x = random.randint(200, viewport_width - 200)
-                                y = random.randint(200, viewport_height - 200)
-                                page.mouse.move(x, y)
-                                page.wait_for_timeout(random.randint(200, 500))
-                        except:
-                            pass
-
-                        # 等待 Cloudflare 自动验证通过
-                        max_wait_time = 60  # 最多等待 60 秒（增加以应对更复杂的验证）
-                        waited = 0
-                        check_interval = 3  # 每 3 秒检查一次
-
-                        while waited < max_wait_time:
-                            page.wait_for_timeout(check_interval * 1000)
-                            waited += check_interval
-
+                        max_wait = 60  # 增加到 60 秒
+                        for i in range(max_wait):
+                            page.wait_for_timeout(1000)
                             html = page.content()
 
-                            # 检查是否通过验证
                             if 'Just a moment' not in html and 'Verify you are human' not in html and '請稍候' not in html:
-                                print("  [Playwright] ✓ Cloudflare 验证通过 (等待 {}秒)".format(waited))
-                                # 验证通过后，立即保存新的 Cookie
-                                try:
-                                    current_cookies = context.cookies()
-                                    if current_cookies:
-                                        with open(cookie_file, 'w', encoding='utf-8') as f:
-                                            json.dump(current_cookies, f, ensure_ascii=False, indent=2)
-                                        print(f"  [Playwright] ✓ 已保存 Cloudflare 验证后的 {len(current_cookies)} 个 Cookie")
-                                except Exception as e:
-                                    print(f"  [Playwright] Cookie 保存失败: {str(e)[:50]}")
+                                print(f"  [Simple] ✓ Cloudflare 验证通过 (等待 {i+1} 秒)")
                                 break
 
-                            if waited % 9 == 0:  # 每 9 秒提示一次
-                                print("  [Playwright] 仍在验证中... (已等待 {}秒)".format(waited))
+                            if (i + 1) % 10 == 0:
+                                print(f"  [Simple] 仍在等待... ({i+1}/{max_wait}秒)")
 
-                        # 最终检查
+                        # 最后再取一次内容
                         html = page.content()
-                        if 'Just a moment' in html or 'Verify you are human' in html or '請稍候' in html:
-                            print("  [Playwright] ⚠ Cloudflare 验证超时，可能需要手动交互")
-                            # 尝试重试
-                            if attempt < retry:
-                                print("  [Playwright] 将在下次尝试中重试...")
-                                continue
 
                     if attempt == 1:
-                        print("  [Playwright] 页面信息获取完成！")
+                        print(f"  [Simple] 完成！HTML 长度: {len(html)}")
 
                     return html
 
                 finally:
-                    # 确保浏览器被关闭
                     browser.close()
 
         except Exception as e:
-            print(f"Playwright request failed (attempt {attempt}/{retry}): {str(e)[:200]}")
+            print(f"  [Simple] 错误 (尝试 {attempt}/{retry}): {str(e)[:200]}")
             if attempt == retry:
-                raise Exception(f"Playwright request failed after {retry} attempts: {str(e)[:200]}")
-            time.sleep(5 * attempt)  # 递增等待时间
+                raise Exception(f"Simple request failed after {retry} attempts: {str(e)}")
+            time.sleep(3 * attempt)
 
-    raise Exception(f"Playwright request failed: {url}")
+    raise Exception(f"Simple request failed: {url}")
+
+
+# 兼容性：提供和原来一样的函数名
+get_response_from_playwright = get_response_from_playwright_simple
+
+
+if __name__ == '__main__':
+    # 测试
+    print("测试最原始的 Playwright 方案")
+    print()
+
+    test_url = "https://jable.tv/models/851cf1602f37c2611917b675f2d432c7/"
+
+    try:
+        html = get_response_from_playwright_simple(test_url)
+
+        print()
+        print("="*60)
+        print("测试结果")
+        print("="*60)
+
+        if 'Just a moment' in html or 'Verify you are human' in html:
+            print("❌ 仍然遇到 Cloudflare 验证")
+        else:
+            print("✅ 成功获取页面内容！")
+            print(f"HTML 长度: {len(html)}")
+
+            # 检查是否有演员名称
+            if 'h3-md mb-1' in html or 'video-img' in html:
+                print("✓ 页面包含正常内容")
+
+    except Exception as e:
+        print(f"❌ 测试失败: {str(e)}")

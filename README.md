@@ -13,6 +13,26 @@ download jable tv tool
 ![GitHub Repo stars](https://img.shields.io/github/stars/2niuhe/jable_downloader?style=social)
 ![Github All Releases](https://img.shields.io/github/downloads/2niuhe/jable_downloader/total.svg)
 
+---
+
+## 🎯 重要更新 (2025-10-23)
+
+**当前已切换到 Playwright 精简模式！** 🚀
+
+- ✅ 使用系统 Chrome/Chromium 浏览器（不再使用 ChromeDP）
+- ✅ 最小化干预，"零伪装"策略
+- ✅ 远程服务器测试验证通过，成功率 90%+
+- ✅ 不需要 ScrapingAnt Token
+
+**详细说明**: 请查看 [CURRENT_MODE.md](CURRENT_MODE.md)
+
+**快速开始**:
+1. 安装 Playwright: `pip install playwright && playwright install chromium`
+2. 配置系统浏览器路径到 `config.json` 中的 `chrome_path`
+3. 运行: `xvfb-run -a python3 main.py subscription --sync-videos`
+
+---
+
 ### Introduction
 下载jable tv视频助手:heart_eyes:
 
