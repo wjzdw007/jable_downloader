@@ -133,6 +133,7 @@ def get_local_video_list(path="./"):
 def get_response_from_playwright(url, retry=3):
     """
     使用 Playwright 获取网页内容，替代 chromedp
+    包含完整的浏览器头部模拟和 Cookie 持久化
 
     Args:
         url: 目标URL
@@ -142,9 +143,13 @@ def get_response_from_playwright(url, retry=3):
         str: 网页HTML内容
     """
     from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+    import random
 
     proxy = CONF.get('proxies', {}).get('http', None)
-    user_agent = HEADERS.get('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
+    user_agent = HEADERS.get('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+
+    # Cookie 持久化文件
+    cookie_file = '.jable_cookies.json'
 
     for attempt in range(1, retry + 1):
         try:
@@ -158,6 +163,8 @@ def get_response_from_playwright(url, retry=3):
                         '--disable-blink-features=AutomationControlled',  # 禁用自动化特征
                         '--no-sandbox',
                         '--disable-dev-shm-usage',
+                        '--disable-web-security',  # 禁用同源策略限制
+                        '--disable-features=IsolateOrigins,site-per-process',
                     ]
                 }
 
@@ -177,6 +184,10 @@ def get_response_from_playwright(url, retry=3):
                         # 添加额外的浏览器特征来模拟真实用户
                         'locale': 'zh-TW',  # 台湾中文
                         'timezone_id': 'Asia/Taipei',
+                        # 设置设备缩放因子
+                        'device_scale_factor': 1,
+                        # 启用 JavaScript
+                        'java_script_enabled': True,
                     }
 
                     # 配置代理
@@ -184,6 +195,39 @@ def get_response_from_playwright(url, retry=3):
                         context_options['proxy'] = {'server': proxy}
 
                     context = browser.new_context(**context_options)
+
+                    # 加载之前保存的 Cookie（如果存在）
+                    if os.path.exists(cookie_file):
+                        try:
+                            with open(cookie_file, 'r', encoding='utf-8') as f:
+                                cookies = json.load(f)
+                                if cookies:
+                                    context.add_cookies(cookies)
+                                    if attempt == 1:
+                                        print(f"  [Playwright] 加载了 {len(cookies)} 个已保存的 Cookie")
+                        except Exception as e:
+                            if attempt == 1:
+                                print(f"  [Playwright] Cookie 加载失败: {str(e)[:50]}")
+
+                    # 设置额外的 HTTP 头部，模拟真实浏览器
+                    extra_headers = {
+                        # Sec-Ch-Ua 系列（Client Hints）
+                        'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24"',
+                        'sec-ch-ua-mobile': '?0',
+                        'sec-ch-ua-platform': '"macOS"',
+                        # Sec-Fetch 系列（Fetch Metadata）
+                        'sec-fetch-dest': 'document',
+                        'sec-fetch-mode': 'navigate',
+                        'sec-fetch-site': 'none',
+                        'sec-fetch-user': '?1',
+                        # 其他标准头部
+                        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                        'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'accept-encoding': 'gzip, deflate, br, zstd',
+                        'upgrade-insecure-requests': '1',
+                        'dnt': '1',  # Do Not Track
+                    }
+                    context.set_extra_http_headers(extra_headers)
 
                     # 添加初始化脚本，隐藏 webdriver 特征和其他自动化痕迹
                     context.add_init_script("""
@@ -306,6 +350,18 @@ def get_response_from_playwright(url, retry=3):
                     # 获取页面内容
                     html = page.content()
 
+                    # 保存 Cookie 供下次使用
+                    try:
+                        current_cookies = context.cookies()
+                        if current_cookies:
+                            with open(cookie_file, 'w', encoding='utf-8') as f:
+                                json.dump(current_cookies, f, ensure_ascii=False, indent=2)
+                            if attempt == 1:
+                                print(f"  [Playwright] 保存了 {len(current_cookies)} 个 Cookie 供下次使用")
+                    except Exception as e:
+                        if attempt == 1:
+                            print(f"  [Playwright] Cookie 保存失败: {str(e)[:50]}")
+
                     # 检查是否遇到 Cloudflare 验证页面
                     if 'Just a moment' in html or 'Verify you are human' in html or '請稍候' in html or '請完成以下操作' in html:
                         if attempt == 1:
@@ -341,6 +397,15 @@ def get_response_from_playwright(url, retry=3):
                             # 检查是否通过验证
                             if 'Just a moment' not in html and 'Verify you are human' not in html and '請稍候' not in html:
                                 print("  [Playwright] ✓ Cloudflare 验证通过 (等待 {}秒)".format(waited))
+                                # 验证通过后，立即保存新的 Cookie
+                                try:
+                                    current_cookies = context.cookies()
+                                    if current_cookies:
+                                        with open(cookie_file, 'w', encoding='utf-8') as f:
+                                            json.dump(current_cookies, f, ensure_ascii=False, indent=2)
+                                        print(f"  [Playwright] ✓ 已保存 Cloudflare 验证后的 {len(current_cookies)} 个 Cookie")
+                                except Exception as e:
+                                    print(f"  [Playwright] Cookie 保存失败: {str(e)[:50]}")
                                 break
 
                             if waited % 9 == 0:  # 每 9 秒提示一次
