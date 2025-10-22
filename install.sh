@@ -73,12 +73,21 @@ fi
 # 即使 venv 模块存在，也检查是否完整安装
 # 通过尝试创建一个临时虚拟环境来验证
 TEST_VENV=".venv_test_$$"
-if python3 -m venv "$TEST_VENV" 2>/dev/null; then
+if python3 -m venv "$TEST_VENV" 2>&1 | grep -q "ensurepip is not available"; then
+    echo "    ⚠ python3-venv 安装不完整（缺少 ensurepip）"
+    MISSING_DEPS+=("python3-venv")
+    rm -rf "$TEST_VENV"
+elif python3 -m venv "$TEST_VENV" 2>/dev/null; then
     if [ ! -f "$TEST_VENV/bin/activate" ]; then
         echo "    ⚠ python3-venv 安装不完整（缺少 activate 脚本）"
         MISSING_DEPS+=("python3-venv")
     fi
     rm -rf "$TEST_VENV"
+else
+    # 创建失败，需要安装
+    echo "    ⚠ 无法创建虚拟环境"
+    MISSING_DEPS+=("python3-venv")
+    rm -rf "$TEST_VENV" 2>/dev/null
 fi
 
 if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
