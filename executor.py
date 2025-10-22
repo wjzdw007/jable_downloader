@@ -132,7 +132,8 @@ def process_videos(args):
     block_video_ids = {str.lower(video_id) for video_id in config.CONF.get("videoIdBlockList", [])}
     ignore_video_ids = local_video_id_set | block_video_ids
 
-    re_extractor = re.compile(r"[a-zA-Z0-9]{2,}-\d{3,}")
+    # 修正正则：匹配完整的视频 ID，包括所有后缀（如 -c, -cn 等）
+    re_extractor = re.compile(r"[a-zA-Z0-9]{2,}-\d{3,}(?:-[a-zA-Z0-9]+)?")
 
     for video_url in video_urls:
         re_res = re_extractor.search(video_url)

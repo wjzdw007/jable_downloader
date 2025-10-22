@@ -122,7 +122,9 @@ def update_video_ids_cache(data):
 
 
 def get_local_video_list(path="./"):
-    re_extractor = re.compile(r"[a-zA-Z0-9]{2,}-\d{3,}")
+    # 修正正则：匹配完整的视频 ID，包括所有后缀
+    # 格式: 字母数字-数字-字母(可选)，例如 ssni-301-c, abc-123, xyz-456-d
+    re_extractor = re.compile(r"[a-zA-Z0-9]{2,}-\d{3,}(?:-[a-zA-Z0-9]+)?")
 
     def extract_movie_id(full_name):
         foo = re_extractor.search(full_name)
