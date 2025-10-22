@@ -196,10 +196,14 @@ def get_response_from_playwright(url, retry=3):
                     print("  [Playwright] 浏览器启动成功，正在加载页面...")
 
                 try:
+                    # 随机视口大小（模拟不同用户的屏幕）
+                    viewport_width = random.randint(1366, 1920)
+                    viewport_height = random.randint(768, 1080)
+
                     # 创建浏览器上下文
                     # 注意：不设置 user_agent，让浏览器使用默认的（版本号会自动匹配）
                     context_options = {
-                        'viewport': {'width': 1920, 'height': 1080},
+                        'viewport': {'width': viewport_width, 'height': viewport_height},
                         'ignore_https_errors': True,
                         # 添加额外的浏览器特征来模拟真实用户
                         'locale': 'zh-TW',  # 台湾中文
@@ -262,6 +266,15 @@ def get_response_from_playwright(url, retry=3):
                             get: () => '{nav_platform}'
                         }});
 
+                        // 设置硬件信息（更真实）
+                        Object.defineProperty(navigator, 'hardwareConcurrency', {{
+                            get: () => 8  // 模拟 8 核 CPU
+                        }});
+
+                        Object.defineProperty(navigator, 'deviceMemory', {{
+                            get: () => 8  // 模拟 8GB 内存
+                        }});
+
                         // 伪造 plugins
                         Object.defineProperty(navigator, 'plugins', {{
                             get: () => [1, 2, 3, 4, 5]
@@ -321,12 +334,6 @@ def get_response_from_playwright(url, retry=3):
 
                     # 创建新页面
                     page = context.new_page()
-
-                    # 模拟真实用户行为 - 设置随机的视口大小
-                    import random
-                    viewport_width = random.randint(1366, 1920)
-                    viewport_height = random.randint(768, 1080)
-                    page.set_viewport_size({'width': viewport_width, 'height': viewport_height})
 
                     # 访问目标URL - 使用 domcontentloaded，不等待所有网络请求
                     # Cloudflare 页面会持续发送请求，networkidle 会超时
@@ -410,7 +417,7 @@ def get_response_from_playwright(url, retry=3):
                             pass
 
                         # 等待 Cloudflare 自动验证通过
-                        max_wait_time = 30  # 最多等待 30 秒
+                        max_wait_time = 60  # 最多等待 60 秒（增加以应对更复杂的验证）
                         waited = 0
                         check_interval = 3  # 每 3 秒检查一次
 

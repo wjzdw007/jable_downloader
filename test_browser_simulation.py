@@ -111,17 +111,38 @@ def test_browser_simulation():
 
 def show_headers_info():
     """显示发送的 HTTP 头部信息"""
+    import platform
+
     print()
     print("="*60)
-    print("📋 发送的 HTTP 头部")
+    print("📋 实际使用的 HTTP 头部（自动适配）")
     print("="*60)
     print()
 
+    # 自动检测操作系统（与 utils.py 一致）
+    system = platform.system()
+    if system == 'Linux':
+        platform_name = 'Linux'
+        print("🖥️  检测到 Linux 系统")
+    elif system == 'Darwin':
+        platform_name = 'macOS'
+        print("🖥️  检测到 macOS 系统")
+    elif system == 'Windows':
+        platform_name = 'Windows'
+        print("🖥️  检测到 Windows 系统")
+    else:
+        platform_name = 'Linux'
+        print("🖥️  检测到未知系统，使用 Linux 配置")
+
+    print()
+    print("✅ 已自动适配头部：")
+    print()
+
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24"',
+        'User-Agent': '（使用浏览器默认的，包含真实版本号）',
+        'sec-ch-ua': '（使用浏览器默认的，包含真实版本号）',
         'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"macOS"',
+        'sec-ch-ua-platform': f'"{platform_name}"',
         'sec-fetch-dest': 'document',
         'sec-fetch-mode': 'navigate',
         'sec-fetch-site': 'none',
@@ -136,6 +157,8 @@ def show_headers_info():
     for key, value in headers.items():
         print(f"  {key}: {value}")
 
+    print()
+    print("💡 注意：User-Agent 和 sec-ch-ua 使用浏览器真实版本，不硬编码")
     print()
 
 
