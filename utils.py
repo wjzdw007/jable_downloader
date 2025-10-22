@@ -150,9 +150,15 @@ def get_response_from_playwright(url, retry=3):
         try:
             with sync_playwright() as p:
                 # 配置浏览器启动参数
+                # 添加参数来降低被 Cloudflare 检测的风险
                 launch_options = {
                     'headless': True,
-                    'timeout': 60000,  # 增加浏览器启动超时时间
+                    'timeout': 60000,
+                    'args': [
+                        '--disable-blink-features=AutomationControlled',  # 禁用自动化特征
+                        '--no-sandbox',
+                        '--disable-dev-shm-usage',
+                    ]
                 }
 
                 # 启动浏览器
@@ -168,6 +174,9 @@ def get_response_from_playwright(url, retry=3):
                         'user_agent': user_agent,
                         'viewport': {'width': 1920, 'height': 1080},
                         'ignore_https_errors': True,
+                        # 添加额外的浏览器特征来模拟真实用户
+                        'locale': 'zh-TW',  # 台湾中文
+                        'timezone_id': 'Asia/Taipei',
                     }
 
                     # 配置代理
@@ -176,23 +185,82 @@ def get_response_from_playwright(url, retry=3):
 
                     context = browser.new_context(**context_options)
 
+                    # 添加初始化脚本，隐藏 webdriver 特征
+                    context.add_init_script("""
+                        Object.defineProperty(navigator, 'webdriver', {
+                            get: () => undefined
+                        });
+                        Object.defineProperty(navigator, 'plugins', {
+                            get: () => [1, 2, 3, 4, 5]
+                        });
+                        Object.defineProperty(navigator, 'languages', {
+                            get: () => ['zh-TW', 'zh', 'en-US', 'en']
+                        });
+                    """)
+
                     # 创建新页面
                     page = context.new_page()
 
-                    # 访问目标URL
-                    page.goto(url, timeout=30000, wait_until='domcontentloaded')
+                    # 访问目标URL - 使用 domcontentloaded，不等待所有网络请求
+                    # Cloudflare 页面会持续发送请求，networkidle 会超时
+                    page.goto(url, timeout=45000, wait_until='domcontentloaded')
                     if attempt == 1:
                         print("  [Playwright] 页面加载完成，正在解析...")
 
-                    # 等待关键元素加载（与chromedp保持一致）
+                    # 等待关键元素加载
                     try:
-                        page.wait_for_selector('#site-header', timeout=10000)
+                        # 优先等待 #site-header
+                        page.wait_for_selector('#site-header', timeout=5000)
                     except PlaywrightTimeoutError:
-                        # 某些页面可能没有这个元素，继续执行
                         pass
+
+                    # 额外等待确保动态内容加载
+                    # 对于演员页面，等待演员名称元素
+                    if '/models/' in url:
+                        try:
+                            # 等待演员名称加载
+                            page.wait_for_selector('h2.h3-md.mb-1', timeout=5000)
+                        except PlaywrightTimeoutError:
+                            # 如果还是没有，再等待一下
+                            page.wait_for_timeout(2000)
+
+                    # 对于视频页面，等待视频信息加载
+                    elif '/videos/' in url:
+                        try:
+                            page.wait_for_selector('.video-detail', timeout=5000)
+                        except PlaywrightTimeoutError:
+                            page.wait_for_timeout(1000)
+
+                    # 其他页面，短暂等待确保动态内容渲染
+                    else:
+                        page.wait_for_timeout(1000)
 
                     # 获取页面内容
                     html = page.content()
+
+                    # 检查是否遇到 Cloudflare 验证页面
+                    if 'Just a moment' in html or 'Verify you are human' in html or 'cloudflare' in html.lower():
+                        if attempt == 1:
+                            print("  [Playwright] 检测到 Cloudflare 验证，等待通过...")
+
+                        # 等待更长时间让 Cloudflare 自动验证通过
+                        page.wait_for_timeout(10000)  # 等待 10 秒
+
+                        # 重新获取页面内容
+                        html = page.content()
+
+                        # 如果还是验证页面，再等一次
+                        if 'Just a moment' in html or 'Verify you are human' in html:
+                            print("  [Playwright] 仍在验证中，继续等待...")
+                            page.wait_for_timeout(10000)  # 再等 10 秒
+                            html = page.content()
+
+                        # 检查是否通过验证
+                        if 'Just a moment' not in html and 'Verify you are human' not in html:
+                            print("  [Playwright] ✓ Cloudflare 验证通过")
+                        else:
+                            print("  [Playwright] ⚠ Cloudflare 验证可能失败，返回当前内容")
+
                     if attempt == 1:
                         print("  [Playwright] 页面信息获取完成！")
 
