@@ -148,6 +148,9 @@ def get_response_from_playwright(url, retry=3):
     proxy = CONF.get('proxies', {}).get('http', None)
     user_agent = HEADERS.get('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
 
+    # 读取配置：是否使用无头模式
+    headless_mode = CONF.get('playwright_headless', True)
+
     # Cookie 持久化文件
     cookie_file = '.jable_cookies.json'
 
@@ -157,7 +160,7 @@ def get_response_from_playwright(url, retry=3):
                 # 配置浏览器启动参数
                 # 添加参数来降低被 Cloudflare 检测的风险
                 launch_options = {
-                    'headless': True,
+                    'headless': headless_mode,  # 从配置读取
                     'timeout': 60000,
                     'args': [
                         '--disable-blink-features=AutomationControlled',  # 禁用自动化特征
@@ -170,7 +173,8 @@ def get_response_from_playwright(url, retry=3):
 
                 # 启动浏览器
                 if attempt == 1:
-                    print("  [Playwright] 启动浏览器...")
+                    mode_text = "无头模式" if headless_mode else "有头模式（可见窗口）"
+                    print(f"  [Playwright] 启动浏览器 ({mode_text})...")
                 browser = p.chromium.launch(**launch_options)
                 if attempt == 1:
                     print("  [Playwright] 浏览器启动成功，正在加载页面...")

@@ -158,6 +158,7 @@
     },
     "sa_token": "",
     "sa_mode": "browser",
+    "playwright_headless": false,
     "proxies_test": {
         "http": "http://127.0.0.1:1081",
         "https": "http://127.0.0.1:1081",
