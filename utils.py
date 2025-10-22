@@ -148,26 +148,20 @@ def get_response_from_playwright(url, retry=3):
 
     proxy = CONF.get('proxies', {}).get('http', None)
 
-    # 自动检测操作系统并适配 User-Agent 和平台
+    # 自动检测操作系统并适配平台名称
     system = platform.system()
     if system == 'Linux':
-        # Linux / Ubuntu
-        default_user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         platform_name = 'Linux'
+        nav_platform = 'Linux x86_64'
     elif system == 'Darwin':
-        # macOS
-        default_user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         platform_name = 'macOS'
+        nav_platform = 'MacIntel'
     elif system == 'Windows':
-        # Windows
-        default_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         platform_name = 'Windows'
+        nav_platform = 'Win32'
     else:
-        # 默认使用 Linux
-        default_user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         platform_name = 'Linux'
-
-    user_agent = HEADERS.get('User-Agent', default_user_agent)
+        nav_platform = 'Linux x86_64'
 
     # 读取配置：是否使用无头模式
     headless_mode = CONF.get('playwright_headless', True)
@@ -202,9 +196,9 @@ def get_response_from_playwright(url, retry=3):
                     print("  [Playwright] 浏览器启动成功，正在加载页面...")
 
                 try:
-                    # 创建浏览器上下文，配置代理和User-Agent
+                    # 创建浏览器上下文
+                    # 注意：不设置 user_agent，让浏览器使用默认的（版本号会自动匹配）
                     context_options = {
-                        'user_agent': user_agent,
                         'viewport': {'width': 1920, 'height': 1080},
                         'ignore_https_errors': True,
                         # 添加额外的浏览器特征来模拟真实用户
@@ -235,10 +229,11 @@ def get_response_from_playwright(url, retry=3):
                             if attempt == 1:
                                 print(f"  [Playwright] Cookie 加载失败: {str(e)[:50]}")
 
-                    # 设置额外的 HTTP 头部，模拟真实浏览器（自动适配操作系统）
+                    # 设置额外的 HTTP 头部
+                    # 注意：不设置 sec-ch-ua（包含版本号），让浏览器使用真实的版本
+                    # 只设置与版本无关的通用头部
                     extra_headers = {
-                        # Sec-Ch-Ua 系列（Client Hints）
-                        'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24"',
+                        # Sec-Ch-Ua 系列（只设置平台，不设置版本号）
                         'sec-ch-ua-mobile': '?0',
                         'sec-ch-ua-platform': f'"{platform_name}"',  # 自动适配：Linux/macOS/Windows
                         # Sec-Fetch 系列（Fetch Metadata）
@@ -256,16 +251,6 @@ def get_response_from_playwright(url, retry=3):
                     context.set_extra_http_headers(extra_headers)
 
                     # 添加初始化脚本，隐藏 webdriver 特征和其他自动化痕迹
-                    # 根据操作系统设置 navigator.platform
-                    if system == 'Linux':
-                        nav_platform = 'Linux x86_64'
-                    elif system == 'Darwin':
-                        nav_platform = 'MacIntel'
-                    elif system == 'Windows':
-                        nav_platform = 'Win32'
-                    else:
-                        nav_platform = 'Linux x86_64'
-
                     context.add_init_script(f"""
                         // 隐藏 webdriver
                         Object.defineProperty(navigator, 'webdriver', {{
