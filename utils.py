@@ -186,6 +186,17 @@ def get_response_from_playwright(url, retry=3):
                     ]
                 }
 
+                # 检查是否使用系统浏览器
+                system_chrome_path = CONF.get('chrome_path', None)
+                if system_chrome_path and os.path.exists(system_chrome_path):
+                    launch_options['executable_path'] = system_chrome_path
+                    if attempt == 1:
+                        print(f"  [Playwright] 使用系统浏览器: {system_chrome_path}")
+                elif system_chrome_path:
+                    if attempt == 1:
+                        print(f"  [Playwright] ⚠️  系统浏览器路径无效: {system_chrome_path}")
+                        print(f"  [Playwright] 使用 Playwright 默认浏览器")
+
                 # 启动浏览器
                 if attempt == 1:
                     mode_text = "无头模式" if headless_mode else "有头模式（可见窗口）"
