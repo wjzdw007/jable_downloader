@@ -185,27 +185,95 @@ def get_response_from_playwright(url, retry=3):
 
                     context = browser.new_context(**context_options)
 
-                    # 添加初始化脚本，隐藏 webdriver 特征
+                    # 添加初始化脚本，隐藏 webdriver 特征和其他自动化痕迹
                     context.add_init_script("""
+                        // 隐藏 webdriver
                         Object.defineProperty(navigator, 'webdriver', {
                             get: () => undefined
                         });
+
+                        // 伪造 plugins
                         Object.defineProperty(navigator, 'plugins', {
                             get: () => [1, 2, 3, 4, 5]
                         });
+
+                        // 设置语言
                         Object.defineProperty(navigator, 'languages', {
                             get: () => ['zh-TW', 'zh', 'en-US', 'en']
                         });
+
+                        // 伪造 Chrome 对象
+                        window.chrome = {
+                            runtime: {},
+                            loadTimes: function() {},
+                            csi: function() {},
+                            app: {}
+                        };
+
+                        // 隐藏自动化相关属性
+                        Object.defineProperty(navigator, 'permissions', {
+                            get: () => ({
+                                query: () => Promise.resolve({ state: 'granted' })
+                            })
+                        });
+
+                        // 伪造 battery API
+                        Object.defineProperty(navigator, 'getBattery', {
+                            get: () => () => Promise.resolve({
+                                charging: true,
+                                chargingTime: 0,
+                                dischargingTime: Infinity,
+                                level: 1
+                            })
+                        });
+
+                        // 覆盖 toString 方法避免检测
+                        const originalQuery = window.navigator.permissions.query;
+                        window.navigator.permissions.query = (parameters) => (
+                            parameters.name === 'notifications' ?
+                                Promise.resolve({ state: Notification.permission }) :
+                                originalQuery(parameters)
+                        );
+
+                        // 伪造 connection
+                        Object.defineProperty(navigator, 'connection', {
+                            get: () => ({
+                                effectiveType: '4g',
+                                rtt: 50,
+                                downlink: 10,
+                                saveData: false
+                            })
+                        });
+
+                        // 隐藏 Playwright 特征
+                        delete navigator.__proto__.webdriver;
                     """)
 
                     # 创建新页面
                     page = context.new_page()
+
+                    # 模拟真实用户行为 - 设置随机的视口大小
+                    import random
+                    viewport_width = random.randint(1366, 1920)
+                    viewport_height = random.randint(768, 1080)
+                    page.set_viewport_size({'width': viewport_width, 'height': viewport_height})
 
                     # 访问目标URL - 使用 domcontentloaded，不等待所有网络请求
                     # Cloudflare 页面会持续发送请求，networkidle 会超时
                     page.goto(url, timeout=45000, wait_until='domcontentloaded')
                     if attempt == 1:
                         print("  [Playwright] 页面加载完成，正在解析...")
+
+                    # 模拟真实用户行为 - 随机移动鼠标
+                    try:
+                        # 随机移动鼠标到几个位置
+                        for _ in range(random.randint(2, 4)):
+                            x = random.randint(100, viewport_width - 100)
+                            y = random.randint(100, viewport_height - 100)
+                            page.mouse.move(x, y)
+                            page.wait_for_timeout(random.randint(100, 300))
+                    except:
+                        pass
 
                     # 等待关键元素加载
                     try:
@@ -239,27 +307,53 @@ def get_response_from_playwright(url, retry=3):
                     html = page.content()
 
                     # 检查是否遇到 Cloudflare 验证页面
-                    if 'Just a moment' in html or 'Verify you are human' in html or 'cloudflare' in html.lower():
+                    if 'Just a moment' in html or 'Verify you are human' in html or '請稍候' in html or '請完成以下操作' in html:
                         if attempt == 1:
                             print("  [Playwright] 检测到 Cloudflare 验证，等待通过...")
 
-                        # 等待更长时间让 Cloudflare 自动验证通过
-                        page.wait_for_timeout(10000)  # 等待 10 秒
+                        # 模拟人类等待 - 随机滚动和鼠标移动
+                        try:
+                            # 随机滚动页面
+                            for _ in range(random.randint(1, 3)):
+                                page.mouse.wheel(0, random.randint(100, 300))
+                                page.wait_for_timeout(random.randint(500, 1000))
 
-                        # 重新获取页面内容
-                        html = page.content()
+                            # 随机移动鼠标
+                            for _ in range(random.randint(2, 4)):
+                                x = random.randint(200, viewport_width - 200)
+                                y = random.randint(200, viewport_height - 200)
+                                page.mouse.move(x, y)
+                                page.wait_for_timeout(random.randint(200, 500))
+                        except:
+                            pass
 
-                        # 如果还是验证页面，再等一次
-                        if 'Just a moment' in html or 'Verify you are human' in html:
-                            print("  [Playwright] 仍在验证中，继续等待...")
-                            page.wait_for_timeout(10000)  # 再等 10 秒
+                        # 等待 Cloudflare 自动验证通过
+                        max_wait_time = 30  # 最多等待 30 秒
+                        waited = 0
+                        check_interval = 3  # 每 3 秒检查一次
+
+                        while waited < max_wait_time:
+                            page.wait_for_timeout(check_interval * 1000)
+                            waited += check_interval
+
                             html = page.content()
 
-                        # 检查是否通过验证
-                        if 'Just a moment' not in html and 'Verify you are human' not in html:
-                            print("  [Playwright] ✓ Cloudflare 验证通过")
-                        else:
-                            print("  [Playwright] ⚠ Cloudflare 验证可能失败，返回当前内容")
+                            # 检查是否通过验证
+                            if 'Just a moment' not in html and 'Verify you are human' not in html and '請稍候' not in html:
+                                print("  [Playwright] ✓ Cloudflare 验证通过 (等待 {}秒)".format(waited))
+                                break
+
+                            if waited % 9 == 0:  # 每 9 秒提示一次
+                                print("  [Playwright] 仍在验证中... (已等待 {}秒)".format(waited))
+
+                        # 最终检查
+                        html = page.content()
+                        if 'Just a moment' in html or 'Verify you are human' in html or '請稍候' in html:
+                            print("  [Playwright] ⚠ Cloudflare 验证超时，可能需要手动交互")
+                            # 尝试重试
+                            if attempt < retry:
+                                print("  [Playwright] 将在下次尝试中重试...")
+                                continue
 
                     if attempt == 1:
                         print("  [Playwright] 页面信息获取完成！")
