@@ -194,8 +194,24 @@ echo ""
 
 # 激活虚拟环境
 echo "[4/7] 激活虚拟环境..."
+if [ ! -f "venv/bin/activate" ]; then
+    echo "    ✗ 虚拟环境激活文件不存在"
+    echo "    检查 venv 目录内容:"
+    ls -la venv/ || echo "    venv 目录不存在"
+    echo ""
+    echo "请检查虚拟环境是否创建成功"
+    exit 1
+fi
+
 source venv/bin/activate
-echo "    ✓ 虚拟环境已激活"
+
+# 验证激活是否成功
+if [ -z "$VIRTUAL_ENV" ]; then
+    echo "    ✗ 虚拟环境激活失败"
+    exit 1
+fi
+
+echo "    ✓ 虚拟环境已激活: $VIRTUAL_ENV"
 echo ""
 
 # 升级 pip
@@ -249,7 +265,7 @@ echo "  运行测试验证安装"
 echo "=================================="
 echo ""
 
-if python test_playwright.py; then
+if python3 test_playwright.py; then
     echo ""
     echo "=================================="
     echo "  ✓ 安装成功！"
@@ -260,10 +276,10 @@ if python test_playwright.py; then
     echo "     source venv/bin/activate"
     echo ""
     echo "  2. 下载视频:"
-    echo "     python main.py videos https://jable.tv/videos/xxxxx/"
+    echo "     python3 main.py videos https://jable.tv/videos/xxxxx/"
     echo ""
     echo "  3. 查看帮助:"
-    echo "     python main.py --help"
+    echo "     python3 main.py --help"
     echo ""
     echo "详细文档:"
     echo "  - 快速开始: cat QUICKSTART.md"
@@ -276,7 +292,7 @@ else
     echo "=================================="
     echo ""
     echo "请运行以下命令进行调试:"
-    echo "  python test_playwright_debug.py"
+    echo "  python3 test_playwright_debug.py"
     echo ""
     exit 1
 fi
