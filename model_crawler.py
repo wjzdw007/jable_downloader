@@ -10,13 +10,15 @@ def input_url_validator(tag_url):
 
 def get_model_names_and_last_page_num(url):
     content = utils.scrapingant_requests_get(url)
-
+    print(url)
     last_page_num = 1
     soup = BeautifulSoup(content, 'html.parser')
-
-    model_name_item = soup.select('#list_videos_common_videos_list > section > div > div > div > h2')
+    model_name_item = soup.find('h2', class_='h3-md mb-1')
     if model_name_item:
-        model_name = model_name_item[0].text
+        model_name = model_name_item.get_text()
+   # model_name_item = soup.select('#list_videos_common_videos_list > section > div > div > div > h2')
+   # if model_name_item:
+   #     model_name = model_name_item[0].text
     elif "jable.tv/search/" in url:
         model_name = url.replace("https://jable.tv/search/", "")[:-1]
     else:

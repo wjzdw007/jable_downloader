@@ -1,16 +1,167 @@
 {
-    "downloadVideoCover": false,
+    "downloadVideoCover": true,
     "downloadInterval": 0,
-    "outputDir": "./",
-    "outputFileFormat": "",
+    "outputDir": "./download",
+    "outputFileFormat": "id/title.mp4",
     "proxies": {},
     "save_vpn_traffic": false,
-    "subscriptions": [],
+    "subscriptions": [
+        [
+            {
+                "url": "https://jable.tv/models/851cf1602f37c2611917b675f2d432c7/",
+                "name": "田中レモン"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/e763382dc86aa703456d964ca25d0e8b/",
+                "name": "新ありな"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/yua-mikami/",
+                "name": "三上悠亜"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/momonogi-kana/",
+                "name": "桃乃木かな"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/tsumugi-akari/",
+                "name": "明里つむぎ"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/c654f88339a6843dcfae0266bc1cb2d6/",
+                "name": "都月るいさ"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/kaede-karen/",
+                "name": "楓カレン"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/3ad92a95895d80a8b35626459a7fb078/",
+                "name": "蒼山愛奈"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/saika-kawakita/",
+                "name": "河北彩花"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/83397477054d35cd07e2c48685335a86/",
+                "name": "八掛うみ"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/7749dd641e0426f55342972d920513a7/",
+                "name": "三田真鈴"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/f88e49c4c1adb0fd1bae71ac122d6b82/",
+                "name": "楓ふうあ"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/nanasawa-mia/",
+                "name": "七沢みあ"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/20d0c4a34eda32e442cc3ff532f568fd/",
+                "name": "小宵こなん"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/moe-amatsuka/",
+                "name": "天使もえ"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/7cadf3e484f607dc7d0f1c0e7a83b007/",
+                "name": "涼森れむ"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/sakura-momo/",
+                "name": "桜空もも"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/1a7543f89b125421e489d98de472ebf4/",
+                "name": "森日向子"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/54754319a72f8388c2a0849316bd4d15/",
+                "name": "五日市芽依"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/9872afd910a9ce9c30b306b77cdbb049/",
+                "name": "百田光稀"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/86b2f23f95cc485af79fe847c5b9de8d/",
+                "name": "楪カレン"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/ad9f176827c286087bc29767186c0a8e/",
+                "name": "女神ジュン"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/aizawa-minami/",
+                "name": "相沢みなみ"
+            }
+        ],
+        [
+            {
+                "url": "https://jable.tv/models/ff8ce98f2419126e00a90bc1f3385824/",
+                "name": "小湊よつ葉"
+            }
+        ]
+    ],
     "videoIdBlockList": [],
     "headers": {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:105.0) Gecko/20100101 Firefox/105.0",
         "Referer": "https://jable.tv"
     },
     "sa_token": "",
-    "sa_mode": "browser"
+    "sa_mode": "browser",
+    "proxies_test": {
+        "http": "http://127.0.0.1:1081",
+        "https": "http://127.0.0.1:1081",
+        "all": "socks5://127.0.0.1:1080"
+    },
+    "sa_token_test": "78f21f52f88c471caa42814c47e0acbe"
 }

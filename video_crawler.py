@@ -114,8 +114,9 @@ def download_by_video_url(url):
     result = re.search("https://.+m3u8", page_str)
     if not result:
         print("Get m3u8 url failed.")
-        print(page_str)
-        exit(1)
+        # print(page_str)
+        print(video_full_name+" 获取下载链接失败，跳过")
+        return
     m3u8url = result[0]
 
     m3u8url_list = m3u8url.split('/')
@@ -158,17 +159,38 @@ def download_by_video_url(url):
     mv_video_and_download_cover(output_dir, video_id, video_full_name, page_str)
 
 
-def scrape(ci, urls):
+def scrape(ci, url):
     try:
         ignore_proxy = CONF.get("save_vpn_traffic")
-        response = utils.requests_with_retry(urls, retry=5, ignore_proxy=ignore_proxy)
+        response = utils.requests_with_retry(url, retry=5, ignore_proxy=ignore_proxy)
     except Exception as e:
         print(e)
-        return
+        return None
 
     content_ts = response.content
     if ci:
-        content_ts = ci.decrypt(content_ts)
+        try:
+            # 检查数据长度，如果不是16的倍数，可能是网络问题导致的不完整数据
+            if len(content_ts) % 16 != 0:
+                print(f"数据长度异常: {url}, 长度: {len(content_ts)}, 不是16的倍数")
+                # 尝试重新下载一次
+                try:
+                    response = utils.requests_with_retry(url, retry=3, ignore_proxy=ignore_proxy)
+                    content_ts = response.content
+                    if len(content_ts) % 16 != 0:
+                        print(f"重试后数据仍然异常: {url}, 长度: {len(content_ts)}")
+                        return None
+                except Exception as retry_e:
+                    print(f"重试下载失败: {url}, 错误: {str(retry_e)}")
+                    return None
+            
+            content_ts = ci.decrypt(content_ts)
+        except ValueError as e:
+            print(f"解密失败: {url}, 错误: {str(e)}")
+            return None
+        except Exception as e:
+            print(f"解密异常: {url}, 错误: {str(e)}")
+            return None
     return content_ts
 
 def download_m3u8_video(ci, output_dir, ts_list: list, video_full_name):
@@ -191,6 +213,7 @@ def download_m3u8_video(ci, output_dir, ts_list: list, video_full_name):
     
     download_list = ts_list
     start_time = time.time()
+    failed_count = 0
     print('开始下载 ' + str(len(download_list)) + ' 个文件..', end='')
     print('预计等待时间: {0:.2f} 分钟 视视频大小和网络速度而定)'.format(len(download_list) / 150))
 
@@ -200,11 +223,9 @@ def download_m3u8_video(ci, output_dir, ts_list: list, video_full_name):
             results = executor.map(partial(scrape, ci), download_list)
             total_num = len(download_list)
             for i, result in enumerate(results):
-                if not result:
-                    print('error get content, skip')
-                else:
-                    print('\r当前下载: {0} , 剩余 {1} 个'.format(
-                        i+1, total_num-i-1), end='', flush=True)
+                if result is not None:
+                    print('\r当前下载: {0} , 剩余 {1} 个, 失败: {2} 个'.format(
+                        i+1, total_num-i-1, failed_count), end='', flush=True)
 
                     buffer.write(result)
                     # Adjust the buffer size as needed
@@ -215,11 +236,20 @@ def download_m3u8_video(ci, output_dir, ts_list: list, video_full_name):
                         buffer.truncate()
                         log_f.write(download_list[i])
                         log_f.seek(0)
+                else:
+                    failed_count += 1
+                    print(f"\n片段 {i+1} 处理失败，跳过 (失败总数: {failed_count})")
 
         # Write any remaining data in the buffer to the file
         buffer.seek(0)
         file.write(buffer.read())
 
+    # 检查失败率，如果失败太多则给出警告
+    failure_rate = (failed_count / total_num) * 100
+    if failure_rate > 10:  # 失败率超过10%
+        print(f"\n警告: 下载失败率较高 ({failure_rate:.1f}%), 视频可能不完整")
+        print(f"成功: {total_num - failed_count} 个片段, 失败: {failed_count} 个片段")
+    
     shutil.move(tmp_video_filename, target_video_filename)
     os.remove(log_filename)
     end_time = time.time()
