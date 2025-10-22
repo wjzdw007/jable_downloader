@@ -70,6 +70,17 @@ if ! python3 -m pip --version &> /dev/null; then
     MISSING_DEPS+=("python3-pip")
 fi
 
+# 即使 venv 模块存在，也检查是否完整安装
+# 通过尝试创建一个临时虚拟环境来验证
+TEST_VENV=".venv_test_$$"
+if python3 -m venv "$TEST_VENV" 2>/dev/null; then
+    if [ ! -f "$TEST_VENV/bin/activate" ]; then
+        echo "    ⚠ python3-venv 安装不完整（缺少 activate 脚本）"
+        MISSING_DEPS+=("python3-venv")
+    fi
+    rm -rf "$TEST_VENV"
+fi
+
 if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
     echo "    ⚠ 缺少以下系统依赖: ${MISSING_DEPS[*]}"
     echo ""
@@ -102,7 +113,8 @@ if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
             fi
 
             echo "    安装 $PKG..."
-            if ! sudo apt-get install -y -qq "$PKG"; then
+            # 使用 --reinstall 确保完整安装
+            if ! sudo apt-get install -y --reinstall -qq "$PKG"; then
                 echo "    ✗ 安装 $PKG 失败"
                 exit 1
             fi
