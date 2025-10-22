@@ -4,3 +4,29 @@
 .idea/
 config.json
 nohup.out
+
+# Python 虚拟环境
+venv/
+env/
+ENV/
+.venv/
+
+# Python 编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 临时文件
+*.tmp
+*.log
+*.m3u8
+
+# Playwright 缓存（已在用户目录，不需要忽略）
+# .ms-playwright/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini

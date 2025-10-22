@@ -101,33 +101,52 @@ def download_by_video_url(url):
 
     output_dir = prepare_output_dir()
 
+    print(f"[1/5] 正在访问视频页面: {video_id}")
     page_str = utils.scrapingant_requests_get(url, retry=5)
 
+    print(f"[2/5] 正在解析视频信息...")
     video_full_name = get_video_full_name(video_id, page_str)
 
     all_filenames = [file.name for file in pathlib.Path(output_dir).rglob('*.mp4')]
     if video_full_name + '.mp4' in all_filenames or video_id + '.mp4' in all_filenames:
         print(video_full_name + " 已经存在，跳过下载")
         return
-    print("开始下载 %s " % video_full_name)
 
-    result = re.search("https://.+m3u8", page_str)
+    print(f"[3/5] 开始下载: {video_full_name}")
+
+    # 使用非贪婪匹配，避免匹配过多内容
+    # 匹配 https://...任意字符.../.m3u8 (可能带查询参数)
+    result = re.search(r'https://[^\s"\'<>]+\.m3u8(?:\?[^\s"\'<>]*)?', page_str)
     if not result:
-        print("Get m3u8 url failed.")
-        # print(page_str)
-        print(video_full_name+" 获取下载链接失败，跳过")
+        print("✗ 获取下载链接失败，跳过")
         return
-    m3u8url = result[0]
+    m3u8url = result[0].strip('"\'')  # 去除可能的引号
+    print(f"  ✓ 找到视频源")
+    print(f"     URL: {m3u8url}")
 
     m3u8url_list = m3u8url.split('/')
     m3u8url_list.pop(-1)
     download_url = '/'.join(m3u8url_list)
     m3u8file = os.path.join(output_dir, video_id + '.m3u8')
 
-    response = utils.requests_with_retry(m3u8url)
+    print(f"[4/5] 正在解析视频播放列表...")
+    print(f"  - 正在下载 m3u8 文件: {m3u8url.split('/')[-1]}")
+    try:
+        # 使用视频页面URL作为Referer
+        headers_with_referer = CONF.get("headers", {}).copy()
+        headers_with_referer['Referer'] = url
+        response = utils.requests_with_retry(m3u8url, headers=headers_with_referer, retry=5)
+        print(f"  ✓ m3u8 文件下载成功")
+    except Exception as e:
+        print(f"  ✗ m3u8 文件下载失败: {str(e)[:100]}")
+        print(f"  完整URL: {m3u8url}")
+        print(f"  提示: 视频链接可能已失效，或需要代理访问CDN")
+        raise
+
     with open(m3u8file, 'wb') as f:
         f.write(response.content)
 
+    print(f"  - 正在解析播放列表...")
     m3u8obj = m3u8.load(m3u8file)
     m3u8uri = ''
     m3u8iv = ''
@@ -143,7 +162,10 @@ def download_by_video_url(url):
         ts_url = download_url + '/' + seg.uri
         ts_list.append(ts_url)
 
+    print(f"  ✓ 找到 {len(ts_list)} 个视频片段")
+
     if m3u8uri:
+        print(f"  ✓ 视频已加密，正在获取解密密钥...")
         m3u8key_url = download_url + '/' + m3u8uri
 
         response = utils.requests_with_retry(m3u8key_url)
@@ -152,11 +174,17 @@ def download_by_video_url(url):
         vt = m3u8iv.replace("0x", "")[:16].encode()
 
         ci = AES.new(content_key, AES.MODE_CBC, vt)
+        print(f"  ✓ 解密密钥获取成功")
     else:
         ci = ''
+        print(f"  ℹ 视频未加密")
 
+    print(f"[5/5] 开始下载视频片段...")
     download_m3u8_video(ci, output_dir, ts_list, video_full_name)
+
+    print(f"正在保存文件...")
     mv_video_and_download_cover(output_dir, video_id, video_full_name, page_str)
+    print(f"✓ 下载完成: {video_full_name}")
 
 
 def scrape(ci, url):
