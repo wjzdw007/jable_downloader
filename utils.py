@@ -192,7 +192,11 @@ def get_response_from_playwright(url, retry=3):
                     print(f"  [Playwright] 启动浏览器 ({mode_text})...")
                     print(f"  [Playwright] 检测到操作系统: {system} → 使用 {platform_name} 平台特征")
                 browser = p.chromium.launch(**launch_options)
+
+                # 获取真实的浏览器版本号
+                browser_version = browser.version
                 if attempt == 1:
+                    print(f"  [Playwright] 浏览器版本: {browser_version}")
                     print("  [Playwright] 浏览器启动成功，正在加载页面...")
 
                 try:
@@ -200,9 +204,22 @@ def get_response_from_playwright(url, retry=3):
                     viewport_width = random.randint(1366, 1920)
                     viewport_height = random.randint(768, 1080)
 
+                    # 根据操作系统和浏览器版本构建正确的 User-Agent
+                    if system == 'Linux':
+                        user_agent = f'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browser_version} Safari/537.36'
+                    elif system == 'Darwin':
+                        user_agent = f'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browser_version} Safari/537.36'
+                    elif system == 'Windows':
+                        user_agent = f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browser_version} Safari/537.36'
+                    else:
+                        user_agent = f'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browser_version} Safari/537.36'
+
+                    if attempt == 1:
+                        print(f"  [Playwright] User-Agent: ... Chrome/{browser_version} ...")
+
                     # 创建浏览器上下文
-                    # 注意：不设置 user_agent，让浏览器使用默认的（版本号会自动匹配）
                     context_options = {
+                        'user_agent': user_agent,  # 使用真实的完整版本号
                         'viewport': {'width': viewport_width, 'height': viewport_height},
                         'ignore_https_errors': True,
                         # 添加额外的浏览器特征来模拟真实用户
@@ -233,11 +250,13 @@ def get_response_from_playwright(url, retry=3):
                             if attempt == 1:
                                 print(f"  [Playwright] Cookie 加载失败: {str(e)[:50]}")
 
-                    # 设置额外的 HTTP 头部
-                    # 注意：不设置 sec-ch-ua（包含版本号），让浏览器使用真实的版本
-                    # 只设置与版本无关的通用头部
+                    # 设置额外的 HTTP 头部，使用真实的浏览器版本号
+                    # 从 browser_version 中提取主版本号（如 130.0.6723.31 -> 130）
+                    major_version = browser_version.split('.')[0]
+
                     extra_headers = {
-                        # Sec-Ch-Ua 系列（只设置平台，不设置版本号）
+                        # Sec-Ch-Ua 系列（使用真实版本号）
+                        'sec-ch-ua': f'"Chromium";v="{major_version}", "Not_A Brand";v="24"',
                         'sec-ch-ua-mobile': '?0',
                         'sec-ch-ua-platform': f'"{platform_name}"',  # 自动适配：Linux/macOS/Windows
                         # Sec-Fetch 系列（Fetch Metadata）
