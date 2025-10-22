@@ -144,9 +144,30 @@ def get_response_from_playwright(url, retry=3):
     """
     from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
     import random
+    import platform
 
     proxy = CONF.get('proxies', {}).get('http', None)
-    user_agent = HEADERS.get('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+
+    # 自动检测操作系统并适配 User-Agent 和平台
+    system = platform.system()
+    if system == 'Linux':
+        # Linux / Ubuntu
+        default_user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        platform_name = 'Linux'
+    elif system == 'Darwin':
+        # macOS
+        default_user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        platform_name = 'macOS'
+    elif system == 'Windows':
+        # Windows
+        default_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        platform_name = 'Windows'
+    else:
+        # 默认使用 Linux
+        default_user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        platform_name = 'Linux'
+
+    user_agent = HEADERS.get('User-Agent', default_user_agent)
 
     # 读取配置：是否使用无头模式
     headless_mode = CONF.get('playwright_headless', True)
@@ -175,6 +196,7 @@ def get_response_from_playwright(url, retry=3):
                 if attempt == 1:
                     mode_text = "无头模式" if headless_mode else "有头模式（可见窗口）"
                     print(f"  [Playwright] 启动浏览器 ({mode_text})...")
+                    print(f"  [Playwright] 检测到操作系统: {system} → 使用 {platform_name} 平台特征")
                 browser = p.chromium.launch(**launch_options)
                 if attempt == 1:
                     print("  [Playwright] 浏览器启动成功，正在加载页面...")
@@ -213,12 +235,12 @@ def get_response_from_playwright(url, retry=3):
                             if attempt == 1:
                                 print(f"  [Playwright] Cookie 加载失败: {str(e)[:50]}")
 
-                    # 设置额外的 HTTP 头部，模拟真实浏览器
+                    # 设置额外的 HTTP 头部，模拟真实浏览器（自动适配操作系统）
                     extra_headers = {
                         # Sec-Ch-Ua 系列（Client Hints）
                         'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24"',
                         'sec-ch-ua-mobile': '?0',
-                        'sec-ch-ua-platform': '"macOS"',
+                        'sec-ch-ua-platform': f'"{platform_name}"',  # 自动适配：Linux/macOS/Windows
                         # Sec-Fetch 系列（Fetch Metadata）
                         'sec-fetch-dest': 'document',
                         'sec-fetch-mode': 'navigate',
@@ -234,64 +256,79 @@ def get_response_from_playwright(url, retry=3):
                     context.set_extra_http_headers(extra_headers)
 
                     # 添加初始化脚本，隐藏 webdriver 特征和其他自动化痕迹
-                    context.add_init_script("""
+                    # 根据操作系统设置 navigator.platform
+                    if system == 'Linux':
+                        nav_platform = 'Linux x86_64'
+                    elif system == 'Darwin':
+                        nav_platform = 'MacIntel'
+                    elif system == 'Windows':
+                        nav_platform = 'Win32'
+                    else:
+                        nav_platform = 'Linux x86_64'
+
+                    context.add_init_script(f"""
                         // 隐藏 webdriver
-                        Object.defineProperty(navigator, 'webdriver', {
+                        Object.defineProperty(navigator, 'webdriver', {{
                             get: () => undefined
-                        });
+                        }});
+
+                        // 设置正确的 platform（与 HTTP 头部一致）
+                        Object.defineProperty(navigator, 'platform', {{
+                            get: () => '{nav_platform}'
+                        }});
 
                         // 伪造 plugins
-                        Object.defineProperty(navigator, 'plugins', {
+                        Object.defineProperty(navigator, 'plugins', {{
                             get: () => [1, 2, 3, 4, 5]
-                        });
+                        }});
 
                         // 设置语言
-                        Object.defineProperty(navigator, 'languages', {
+                        Object.defineProperty(navigator, 'languages', {{
                             get: () => ['zh-TW', 'zh', 'en-US', 'en']
-                        });
+                        }});
 
                         // 伪造 Chrome 对象
-                        window.chrome = {
-                            runtime: {},
-                            loadTimes: function() {},
-                            csi: function() {},
-                            app: {}
-                        };
+                        window.chrome = {{
+                            runtime: {{}},
+                            loadTimes: function() {{}},
+                            csi: function() {{}},
+                            app: {{}}
+                        }};
 
                         // 隐藏自动化相关属性
-                        Object.defineProperty(navigator, 'permissions', {
-                            get: () => ({
-                                query: () => Promise.resolve({ state: 'granted' })
-                            })
-                        });
+                        Object.defineProperty(navigator, 'permissions', {{
+                            get: () => ({{
+                                query: () => Promise.resolve({{ state: 'granted' }})
+                            }})
+                        }});
 
                         // 伪造 battery API
-                        Object.defineProperty(navigator, 'getBattery', {
-                            get: () => () => Promise.resolve({
+                        Object.defineProperty(navigator, 'getBattery', {{
+                            get: () => () => Promise.resolve({{
                                 charging: true,
                                 chargingTime: 0,
                                 dischargingTime: Infinity,
                                 level: 1
-                            })
-                        });
+                            }})
+                        }});
 
                         // 覆盖 toString 方法避免检测
                         const originalQuery = window.navigator.permissions.query;
                         window.navigator.permissions.query = (parameters) => (
                             parameters.name === 'notifications' ?
-                                Promise.resolve({ state: Notification.permission }) :
+                                Promise.resolve({{ state: Notification.permission }}) :
                                 originalQuery(parameters)
                         );
 
                         // 伪造 connection
-                        Object.defineProperty(navigator, 'connection', {
-                            get: () => ({
+                        Object.defineProperty(navigator, 'connection', {{
+                            get: () => ({{
                                 effectiveType: '4g',
                                 rtt: 50,
                                 downlink: 10,
                                 saveData: false
-                            })
-                        });
+                            }})
+                        }});
 
                         // 隐藏 Playwright 特征
                         delete navigator.__proto__.webdriver;
