@@ -1,6 +1,7 @@
 """
 最原始、最简单的 Playwright 使用方案
 不做任何伪装、不设置头部、不注入 JavaScript
+不保存/加载 Cookie，完全独立的浏览器会话
 完全模拟真实用户使用浏览器的行为
 
 这是完整的 utils.py 替代版本，包含所有必要的函数
@@ -142,10 +143,11 @@ def get_response_from_playwright_simple(url, retry=3):
     最原始的 Playwright 使用方案
 
     原则：
-    - 不设置任何额外的 HTTP 头部
+    - 不设置任何额外的 HTTP 头部（除了 Referer 用于分页导航）
     - 不注入任何 JavaScript 代码
     - 不做任何浏览器指纹伪装
     - 不强制设置 User-Agent
+    - 不保存/加载 Cookie，每次都是全新会话
     - 让浏览器完全按照默认行为运行
     - 唯一做的：使用系统浏览器（如果配置了）
 
@@ -161,9 +163,6 @@ def get_response_from_playwright_simple(url, retry=3):
     proxy = CONF.get('proxies', {}).get('http', None)
     headless_mode = CONF.get('playwright_headless', True)
     system_chrome_path = CONF.get('chrome_path', None)
-
-    # Cookie 文件
-    cookie_file = '.jable_cookies.json'
 
     for attempt in range(1, retry + 1):
         try:
@@ -201,19 +200,6 @@ def get_response_from_playwright_simple(url, retry=3):
 
                     context = browser.new_context(**context_options)
 
-                    # 加载之前保存的 Cookie（这是唯一的优化）
-                    if os.path.exists(cookie_file):
-                        try:
-                            with open(cookie_file, 'r', encoding='utf-8') as f:
-                                cookies = json.load(f)
-                                if cookies:
-                                    context.add_cookies(cookies)
-                                    if attempt == 1:
-                                        print(f"  [Simple] 加载了 {len(cookies)} 个 Cookie")
-                        except Exception as e:
-                            if attempt == 1:
-                                print(f"  [Simple] Cookie 加载失败: {str(e)[:50]}")
-
                     # 设置基础的 Referer（如果 URL 有参数）
                     # 这样访问 ?from=1 时会带上 Referer，模拟真实的页面导航
                     from urllib.parse import urlparse, parse_qs
@@ -246,18 +232,6 @@ def get_response_from_playwright_simple(url, retry=3):
                     # 获取页面内容
                     html = page.content()
 
-                    # 保存 Cookie
-                    try:
-                        current_cookies = context.cookies()
-                        if current_cookies:
-                            with open(cookie_file, 'w', encoding='utf-8') as f:
-                                json.dump(current_cookies, f, ensure_ascii=False, indent=2)
-                            if attempt == 1:
-                                print(f"  [Simple] 保存了 {len(current_cookies)} 个 Cookie")
-                    except Exception as e:
-                        if attempt == 1:
-                            print(f"  [Simple] Cookie 保存失败: {str(e)[:50]}")
-
                     # 检查是否遇到 Cloudflare
                     if 'Just a moment' in html or 'Verify you are human' in html or '請稍候' in html:
                         if attempt == 1:
@@ -274,14 +248,6 @@ def get_response_from_playwright_simple(url, retry=3):
 
                             if 'Just a moment' not in html and 'Verify you are human' not in html and '請稍候' not in html:
                                 print(f"  [Simple] ✓ Cloudflare 验证通过 (等待 {i+1} 秒)")
-
-                                # 保存验证后的 Cookie
-                                try:
-                                    current_cookies = context.cookies()
-                                    with open(cookie_file, 'w', encoding='utf-8') as f:
-                                        json.dump(current_cookies, f, ensure_ascii=False, indent=2)
-                                except:
-                                    pass
                                 break
 
                             if (i + 1) % 10 == 0:
