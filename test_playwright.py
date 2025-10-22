@@ -5,6 +5,7 @@
 测试 Playwright 实现是否正常工作
 """
 
+from __future__ import print_function
 import sys
 import config
 from utils import get_response_from_playwright
@@ -15,7 +16,7 @@ def test_playwright():
     # 使用一个简单的测试URL
     test_url = "https://example.com"
 
-    print(f"正在测试 Playwright 访问: {test_url}")
+    print("正在测试 Playwright 访问: {}".format(test_url))
     print("-" * 60)
 
     try:
@@ -23,8 +24,8 @@ def test_playwright():
 
         if html and len(html) > 0:
             print("✓ Playwright 测试成功!")
-            print(f"✓ 获取到的HTML长度: {len(html)} 字符")
-            print(f"✓ HTML预览 (前200字符):")
+            print("✓ 获取到的HTML长度: {} 字符".format(len(html)))
+            print("✓ HTML预览 (前200字符):")
             print("-" * 60)
             print(html[:200])
             print("-" * 60)
@@ -34,7 +35,7 @@ def test_playwright():
             return False
 
     except Exception as e:
-        print(f"✗ 测试失败: {e}")
+        print("✗ 测试失败: {}".format(e))
         import traceback
         traceback.print_exc()
         return False

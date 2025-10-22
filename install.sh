@@ -8,6 +8,18 @@ echo "  Jable Downloader 安装脚本"
 echo "=================================="
 echo ""
 
+# 获取实际用户（即使使用sudo也能获取）
+ACTUAL_USER="${SUDO_USER:-$USER}"
+ACTUAL_HOME=$(getent passwd "$ACTUAL_USER" | cut -d: -f6)
+
+if [ "$ACTUAL_USER" = "root" ]; then
+    echo "⚠ 警告: 正在以 root 用户运行"
+    echo ""
+else
+    echo "当前用户: $ACTUAL_USER"
+    echo ""
+fi
+
 # 检测操作系统
 if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -23,12 +35,25 @@ echo ""
 # 检查 Python 版本
 echo "[1/7] 检查 Python 版本..."
 if ! command -v python3 &> /dev/null; then
-    echo "错误: 未找到 python3，请先安装 Python 3.8+"
+    echo "    ✗ 未找到 python3，请先安装 Python 3.6+"
     exit 1
 fi
 
 PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+PYTHON_VERSION_NUM=$(python3 -c 'import sys; print(sys.version_info[0] * 10 + sys.version_info[1])')
+
 echo "    ✓ Python 版本: $PYTHON_VERSION"
+
+# 检查 Python 版本是否 >= 3.6
+if [ "$PYTHON_VERSION_NUM" -lt 36 ]; then
+    echo "    ✗ Python 版本过低 (需要 3.6+，当前 $PYTHON_VERSION)"
+    echo ""
+    echo "请升级 Python 版本:"
+    echo "  Ubuntu/Debian: sudo apt install python3.8"
+    echo "  CentOS/RHEL: sudo yum install python38"
+    echo ""
+    exit 1
+fi
 echo ""
 
 # 检查并安装系统依赖
@@ -130,15 +155,38 @@ echo ""
 # 创建虚拟环境
 echo "[3/7] 创建虚拟环境..."
 if [ -d "venv" ]; then
-    echo "    虚拟环境已存在，跳过创建"
-else
-    if ! python3 -m venv venv; then
-        echo "    ✗ 虚拟环境创建失败"
-        echo ""
-        echo "请尝试手动创建:"
-        echo "    python3 -m venv venv"
-        echo ""
-        exit 1
+    # 检查虚拟环境所有者
+    VENV_OWNER=$(stat -c '%U' venv 2>/dev/null || stat -f '%Su' venv 2>/dev/null)
+    if [ "$VENV_OWNER" != "$ACTUAL_USER" ] && [ "$ACTUAL_USER" != "root" ]; then
+        echo "    ⚠ 虚拟环境属于其他用户 ($VENV_OWNER)，需要重新创建"
+        echo "    正在删除旧的虚拟环境..."
+        rm -rf venv
+    else
+        echo "    虚拟环境已存在，跳过创建"
+    fi
+fi
+
+if [ ! -d "venv" ]; then
+    # 如果是通过 sudo 运行，以实际用户身份创建虚拟环境
+    if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+        echo "    以用户 $SUDO_USER 身份创建虚拟环境..."
+        if ! sudo -u "$SUDO_USER" python3 -m venv venv; then
+            echo "    ✗ 虚拟环境创建失败"
+            echo ""
+            echo "请尝试不使用 sudo 运行安装脚本:"
+            echo "    ./install.sh"
+            echo ""
+            exit 1
+        fi
+    else
+        if ! python3 -m venv venv; then
+            echo "    ✗ 虚拟环境创建失败"
+            echo ""
+            echo "请尝试手动创建:"
+            echo "    python3 -m venv venv"
+            echo ""
+            exit 1
+        fi
     fi
     echo "    ✓ 虚拟环境创建成功"
 fi
