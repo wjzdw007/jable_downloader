@@ -214,6 +214,19 @@ def get_response_from_playwright_simple(url, retry=3):
                             if attempt == 1:
                                 print(f"  [Simple] Cookie 加载失败: {str(e)[:50]}")
 
+                    # 设置基础的 Referer（如果 URL 有参数）
+                    # 这样访问 ?from=1 时会带上 Referer，模拟真实的页面导航
+                    from urllib.parse import urlparse, parse_qs
+                    parsed = urlparse(url)
+                    if parsed.query:  # 如果有查询参数
+                        # 基础 URL（不带参数）作为 Referer
+                        base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                        context.set_extra_http_headers({
+                            'Referer': base_url
+                        })
+                        if attempt == 1:
+                            print(f"  [Simple] 设置 Referer: {base_url}")
+
                     # 创建页面
                     page = context.new_page()
 
@@ -254,7 +267,7 @@ def get_response_from_playwright_simple(url, retry=3):
                         if attempt == 1:
                             print(f"  [Simple] 等待 Cloudflare 自动验证...")
 
-                        max_wait = 30
+                        max_wait = 60  # 增加到 60 秒
                         for i in range(max_wait):
                             page.wait_for_timeout(1000)
                             html = page.content()
