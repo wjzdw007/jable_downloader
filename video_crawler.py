@@ -202,17 +202,20 @@ def download_by_video_url(url):
         print(f"  ℹ 视频未加密")
 
     print(f"[5/5] 开始下载视频片段...")
-    download_m3u8_video(ci, output_dir, ts_list, video_full_name)
+    download_m3u8_video(ci, output_dir, ts_list, video_full_name, headers_with_referer)
 
     print(f"正在保存文件...")
     mv_video_and_download_cover(output_dir, video_id, video_full_name, page_str)
     print(f"✓ 下载完成: {video_full_name}")
 
 
-def scrape(ci, url):
+def scrape(ci, url, headers=None):
     try:
         ignore_proxy = CONF.get("save_vpn_traffic")
-        response = utils.requests_with_retry(url, retry=5, ignore_proxy=ignore_proxy)
+        # 使用传入的 headers，如果没有则使用默认的
+        if headers is None:
+            headers = CONF.get("headers", {})
+        response = utils.requests_with_retry(url, headers=headers, retry=5, ignore_proxy=ignore_proxy)
     except Exception as e:
         print(e)
         return None
@@ -225,7 +228,7 @@ def scrape(ci, url):
                 print(f"数据长度异常: {url}, 长度: {len(content_ts)}, 不是16的倍数")
                 # 尝试重新下载一次
                 try:
-                    response = utils.requests_with_retry(url, retry=3, ignore_proxy=ignore_proxy)
+                    response = utils.requests_with_retry(url, headers=headers, retry=3, ignore_proxy=ignore_proxy)
                     content_ts = response.content
                     if len(content_ts) % 16 != 0:
                         print(f"重试后数据仍然异常: {url}, 长度: {len(content_ts)}")
@@ -243,7 +246,7 @@ def scrape(ci, url):
             return None
     return content_ts
 
-def download_m3u8_video(ci, output_dir, ts_list: list, video_full_name):
+def download_m3u8_video(ci, output_dir, ts_list: list, video_full_name, headers=None):
     buffer = io.BytesIO()
     tmp_video_filename = os.path.join(output_dir, video_full_name + ".tmp")
     target_video_filename = os.path.join(output_dir, video_full_name + ".mp4")
@@ -270,7 +273,7 @@ def download_m3u8_video(ci, output_dir, ts_list: list, video_full_name):
 
     with open(tmp_video_filename, tmp_video_open_mode) as file, open(log_filename, 'w') as log_f:
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKER) as executor:
-            results = executor.map(partial(scrape, ci), download_list)
+            results = executor.map(partial(scrape, ci, headers=headers), download_list)
             total_num = len(download_list)
             for i, result in enumerate(results):
                 if result is not None:
