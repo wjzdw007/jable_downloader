@@ -189,7 +189,8 @@ def download_by_video_url(url):
         print(f"  ✓ 视频已加密，正在获取解密密钥...")
         m3u8key_url = download_url + '/' + m3u8uri
 
-        response = utils.requests_with_retry(m3u8key_url)
+        # 使用相同的完整请求头
+        response = utils.requests_with_retry(m3u8key_url, headers=headers_with_referer)
         content_key = response.content
 
         vt = m3u8iv.replace("0x", "")[:16].encode()

@@ -25,7 +25,15 @@ def get_config(conf_path='./config.json'):
         return
 
     with open(conf_path, 'r', encoding='utf8') as f:
-        return CONF.update(json.load(f))
+        user_conf = json.load(f)
+
+        # 深度合并 headers，保留默认的 User-Agent
+        if 'headers' in user_conf:
+            default_headers = CONF.get('headers', {}).copy()
+            default_headers.update(user_conf['headers'])
+            user_conf['headers'] = default_headers
+
+        return CONF.update(user_conf)
 
 
 def update_config(conf, conf_path='./config.json'):

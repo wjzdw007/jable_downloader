@@ -7,7 +7,7 @@ import requests
 import time
 
 # 测试 URL（从用户的错误信息中获取）
-test_url = "https://anono-cloneing.mushroomtrack.com/hls/ZUs_fJVfSsWuuNdOzpo3hw/1761173802/54000/54211/54211.m3u8"
+test_url = "https://adoda-smart-coin.mushroomtrack.com/hls/54Y8cBjAIYwGQNCz8iNY9A/1761241870/54000/54211/54211.m3u8"
 video_page_url = "https://jable.tv/videos/abf-274/"
 
 print("=" * 80)
