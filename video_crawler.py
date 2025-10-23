@@ -138,9 +138,30 @@ def download_by_video_url(url):
         response = utils.requests_with_retry(m3u8url, headers=headers_with_referer, retry=5)
         print(f"  ✓ m3u8 文件下载成功")
     except Exception as e:
-        print(f"  ✗ m3u8 文件下载失败: {str(e)[:100]}")
-        print(f"  完整URL: {m3u8url}")
-        print(f"  提示: 视频链接可能已失效，或需要代理访问CDN")
+        error_msg = str(e)
+        print(f"  ✗ m3u8 文件下载失败: {error_msg[:100]}")
+
+        # 如果是 410 错误，提供详细的诊断信息
+        if "410" in error_msg or "Gone" in error_msg:
+            print(f"  ")
+            print(f"  ❌ 链接已过期（HTTP 410 Gone）")
+            print(f"  ")
+            print(f"  可能的原因:")
+            print(f"    1. 服务器时间不准确（最常见）")
+            print(f"       运行: ./check_server_time.sh 检查时间")
+            print(f"       运行: sudo ntpdate -u time.nist.gov 同步时间")
+            print(f"    ")
+            print(f"    2. 视频链接包含时间戳，有效期已过")
+            print(f"       - CDN 链接通常只在获取后几分钟到几小时内有效")
+            print(f"       - 确保从获取页面到下载之间没有长时间延迟")
+            print(f"    ")
+            print(f"    3. 页面可能被缓存")
+            print(f"       - 清除浏览器缓存")
+            print(f"       - 强制刷新页面")
+        else:
+            print(f"  完整URL: {m3u8url}")
+            print(f"  提示: 视频链接可能已失效，或需要代理访问CDN")
+
         raise
 
     with open(m3u8file, 'wb') as f:

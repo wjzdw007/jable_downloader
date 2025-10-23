@@ -65,6 +65,16 @@ def requests_with_retry(url, headers=HEADERS, timeout=20, retry=5, ignore_proxy=
         if str(response.status_code).startswith('2'):
             return response
         else:
+            # 对于永久性错误（404, 410），不重试
+            if response.status_code in [404, 410]:
+                if response.status_code == 410:
+                    print(f"    ✗ HTTP 410 Gone: 资源已过期或永久消失")
+                    print(f"    💡 提示: 链接可能包含时间戳已过期，或服务器时间不准确")
+                else:
+                    print(f"    ✗ HTTP 404: 资源不存在")
+                raise Exception(f"HTTP {response.status_code}: {url}")
+
+            # 对于其他错误，重试
             if i < retry:
                 wait_time = min(10 * i, 30)
                 print(f"    ⚠ HTTP错误 (尝试 {i}/{retry}): 状态码 {response.status_code}")
