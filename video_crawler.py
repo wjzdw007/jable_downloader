@@ -27,10 +27,26 @@ def get_video_full_name(video_id, html_str):
         meta_content = meta.get("content")
         if not meta_content:
             continue
-        if video_id not in meta_content.lower():
-            continue
-        video_full_name = meta_content
-        break
+        # 精确匹配：video_id 必须在 meta_content 中作为完整单词出现
+        # 支持分隔符：空格、横线、下划线等
+        meta_lower = meta_content.lower()
+        video_id_lower = video_id.lower()
+
+        # 检查是否包含完整的 video_id（不是作为子串）
+        # 例如：mide-938nggn 不应该匹配 mide-938
+        if video_id_lower in meta_lower:
+            # 确保匹配的是完整的 ID，检查前后字符
+            idx = meta_lower.find(video_id_lower)
+            before_char = meta_lower[idx-1] if idx > 0 else ' '
+            after_idx = idx + len(video_id_lower)
+            after_char = meta_lower[after_idx] if after_idx < len(meta_lower) else ' '
+
+            # 视频 ID 的合法字符：字母、数字、横线
+            # 前后字符不应该是这些字符（避免部分匹配）
+            is_valid_id_char = lambda c: c.isalnum() or c == '-'
+            if not (is_valid_id_char(before_char) or is_valid_id_char(after_char)):
+                video_full_name = meta_content
+                break
 
     if len(video_full_name.encode()) > 248:
         video_full_name = video_full_name[:50]
