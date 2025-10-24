@@ -6,6 +6,7 @@ import config
 import model_crawler
 import utils
 import video_crawler
+import hot_crawler
 
 CONF = config.CONF
 
@@ -150,3 +151,18 @@ def process_videos(args):
                 continue
             ignore_video_ids.add(video_id)
         video_crawler.download_by_video_url(video_url)
+
+
+def process_hot(args):
+    """
+    处理热门视频下载命令
+
+    Args:
+        args: 命令行参数
+            - top: 下载数量（默认 4）
+            - min_likes: 最小点赞数（默认 2000）
+    """
+    top_n = args.top if hasattr(args, 'top') and args.top else 4
+    min_likes = args.min_likes if hasattr(args, 'min_likes') and args.min_likes else 2000
+
+    hot_crawler.download_hot_videos(top_n=top_n, min_likes=min_likes)

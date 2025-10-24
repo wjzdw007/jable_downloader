@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import argparse
-from executor import process_subscription, process_videos
+from executor import process_subscription, process_videos, process_hot
 
 parser = argparse.ArgumentParser(description="jable downloader")
 
@@ -28,6 +28,16 @@ models_parser.add_argument("--ids", type=int, metavar='N', nargs='+', default=[]
                            help="specify subscription ids to use to sync videos")
 
 models_parser.set_defaults(func=process_subscription)
+
+hot_parser = sub_parser.add_parser("hot",
+                                    help="download top liked videos from https://jable.tv/hot/")
+
+hot_parser.add_argument("--top", type=int, default=4,
+                        help="number of top videos to download (default: 4)")
+hot_parser.add_argument("--min-likes", type=int, default=2000,
+                        help="minimum likes threshold (default: 2000)")
+
+hot_parser.set_defaults(func=process_hot)
 
 
 if __name__ == '__main__':
