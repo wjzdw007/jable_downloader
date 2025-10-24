@@ -9,7 +9,32 @@ import time
 from typing import List, Dict, Optional, Tuple
 from bs4 import BeautifulSoup
 
-import utils
+# 使用优化版的 utils（复用浏览器，禁用资源，移除固定等待）
+try:
+    import utils_fast
+    USE_FAST_MODE = True
+    print("ℹ️  使用优化版爬虫（utils_fast）")
+
+    def fetch_page(url: str, retry: int = 3) -> str:
+        """统一的页面获取接口（优化版）"""
+        return utils_fast.fast_requests_get(url, retry)
+
+    def cleanup_browser():
+        """清理浏览器实例"""
+        utils_fast.close_browser_instance()
+
+except ImportError:
+    import utils
+    USE_FAST_MODE = False
+    print("⚠️  优化版不可用，使用原版 utils")
+
+    def fetch_page(url: str, retry: int = 3) -> str:
+        """统一的页面获取接口（原版）"""
+        return utils.scrapingant_requests_get(url, retry)
+
+    def cleanup_browser():
+        """清理浏览器实例（原版无需清理）"""
+        pass
 
 
 def extract_videos_from_page(html: str) -> List[Dict]:
@@ -143,7 +168,7 @@ def crawl_hot_page(page_num: int = 1, retry: int = 3) -> Tuple[List[Dict], int]:
     print(f"正在爬取第 {page_num} 页: {url}")
 
     try:
-        html = utils.scrapingant_requests_get(url, retry=retry)
+        html = fetch_page(url, retry=retry)
         videos = extract_videos_from_page(html)
 
         # 只在第一页时获取总页数
@@ -216,6 +241,11 @@ def crawl_all_hot_pages(start_page: int = 1, end_page: Optional[int] = None,
     print("\n" + "=" * 80)
     print(f"✓ 爬取完成！共获取 {len(all_videos):,} 个视频")
     print("=" * 80)
+
+    # 清理浏览器实例（如果使用优化版）
+    if USE_FAST_MODE:
+        print("\n正在清理浏览器实例...")
+        cleanup_browser()
 
     return all_videos
 
@@ -292,7 +322,7 @@ def crawl_video_actors(video_id: str, video_url: Optional[str] = None, retry: in
     print(f"  正在获取视频 {video_id} 的演员信息...")
 
     try:
-        html = utils.scrapingant_requests_get(video_url, retry=retry)
+        html = fetch_page(video_url, retry=retry)
         actors = extract_actors_from_video_page(html)
 
         if actors:
