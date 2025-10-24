@@ -88,18 +88,24 @@ def get_all_video_ids(url, cached_ids_set=None):
         page_url = get_page_url(url, page_num)
         print("\r抓取 %s 第 %s 页 共 %s 页" % (tag_name, page_num, last_page_num), end="", flush=True)
 
-        content = utils.scrapingant_requests_get(page_url, retry=20)
+        try:
+            content = utils.scrapingant_requests_get(page_url, retry=20)
 
-        soup = BeautifulSoup(content, 'html.parser')
-        a_tags = soup.select('div.img-box>a')
-        for a_tag in a_tags:
-            if a_tag.get('href'):
-                video_ids.add(a_tag['href'].split('/')[-2])
+            soup = BeautifulSoup(content, 'html.parser')
+            a_tags = soup.select('div.img-box>a')
+            for a_tag in a_tags:
+                if a_tag.get('href'):
+                    video_ids.add(a_tag['href'].split('/')[-2])
 
-        need_break = is_query_over(video_ids, total_video_num, cached_ids_set)
-        if need_break:
-            video_ids |= cached_ids_set
-            break
+            need_break = is_query_over(video_ids, total_video_num, cached_ids_set)
+            if need_break:
+                video_ids |= cached_ids_set
+                break
+
+        except Exception as e:
+            print(f"\n⚠️  第 {page_num} 页抓取失败: {str(e)[:100]}")
+            print(f"   继续抓取下一页...")
+            continue
 
     print('%s => 获取到 %s 个影片' % (tag_name, len(video_ids)))
     return video_ids

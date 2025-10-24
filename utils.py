@@ -92,7 +92,8 @@ def scrapingant_requests_get(url, retry=5) -> str:
             print("You need to go to https://app.scrapingant.com/ website to\n apply for a token and fill it in the sa_token field")
             print("Use local Playwright as a replacement.\n")
         print("  [Playwright] 正在获取视频页面信息...")
-        return get_response_from_playwright(url)
+        # 传递 retry 参数
+        return get_response_from_playwright(url, retry=retry)
 
     query_param = {
         "timeout": 180
@@ -185,10 +186,15 @@ def get_response_from_playwright_simple(url, retry=3):
                 }
 
                 # 如果配置了系统浏览器，使用系统浏览器
-                if system_chrome_path and os.path.exists(system_chrome_path):
-                    launch_options['executable_path'] = system_chrome_path
-                    if attempt == 1:
-                        print(f"  [Simple] 使用系统浏览器: {system_chrome_path}")
+                if attempt == 1 and system_chrome_path:
+                    print(f"  [Simple] 检测到 chrome_path 配置: {system_chrome_path}")
+                    if os.path.exists(system_chrome_path):
+                        launch_options['executable_path'] = system_chrome_path
+                        print(f"  [Simple] ✓ 使用系统浏览器: {system_chrome_path}")
+                    else:
+                        print(f"  [Simple] ⚠️  chrome_path 路径不存在，将使用 Playwright 自带浏览器")
+                elif attempt == 1:
+                    print(f"  [Simple] 未配置 chrome_path，使用 Playwright 自带浏览器")
 
                 # 启动浏览器
                 if attempt == 1:
@@ -232,7 +238,9 @@ def get_response_from_playwright_simple(url, retry=3):
                     if attempt == 1:
                         print(f"  [Simple] 正在访问: {url}")
 
-                    page.goto(url, timeout=60000)
+                    # 使用 domcontentloaded 更快，不等待所有资源加载
+                    # 增加超时到 120 秒，避免网络慢时超时
+                    page.goto(url, wait_until='domcontentloaded', timeout=120000)
 
                     # 等待页面加载完成
                     if attempt == 1:
@@ -280,7 +288,10 @@ def get_response_from_playwright_simple(url, retry=3):
             print(f"  [Simple] 错误 (尝试 {attempt}/{retry}): {str(e)[:200]}")
             if attempt == retry:
                 raise Exception(f"Simple request failed after {retry} attempts: {str(e)}")
-            time.sleep(3 * attempt)
+            # 递增等待时间：第1次失败等5秒，第2次等10秒，第3次等15秒...
+            wait_time = 5 * attempt
+            print(f"  [Simple] 等待 {wait_time} 秒后重试...")
+            time.sleep(wait_time)
 
     raise Exception(f"Simple request failed: {url}")
 

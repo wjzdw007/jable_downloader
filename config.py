@@ -22,6 +22,9 @@ CONF = {
 
 def get_config(conf_path='./config.json'):
     if not os.path.exists(conf_path):
+        print(f"⚠️  配置文件不存在: {conf_path}")
+        print(f"   将使用默认配置")
+        print(f"   提示：可以从 config.example.json 复制创建配置文件")
         return
 
     with open(conf_path, 'r', encoding='utf8') as f:
