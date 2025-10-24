@@ -8,6 +8,11 @@ import re
 import time
 from typing import List, Dict, Optional, Tuple
 from bs4 import BeautifulSoup
+from progress_tracker import ProgressTracker
+
+# 预编译正则表达式（优化性能）
+WHITESPACE_PATTERN = re.compile(r'\s+')
+PAGE_NUMBER_PATTERN = re.compile(r'/hot/(\d+)/')
 
 # 使用优化版的 utils（复用浏览器，禁用资源，移除固定等待）
 try:
@@ -47,7 +52,12 @@ def extract_videos_from_page(html: str) -> List[Dict]:
     Returns:
         视频列表，每项包含 {video_id, title, views, likes, url}
     """
-    soup = BeautifulSoup(html, 'html.parser')
+    # 使用 lxml 解析器（比 html.parser 快5-10倍）
+    try:
+        soup = BeautifulSoup(html, 'lxml')
+    except:
+        # 如果 lxml 未安装，回退到 html.parser
+        soup = BeautifulSoup(html, 'html.parser')
     video_containers = soup.select('div.video-img-box')
 
     videos = []
@@ -88,8 +98,8 @@ def extract_videos_from_page(html: str) -> List[Dict]:
                 for line in lines:
                     line = line.strip()
                     if line:
-                        # 去除所有空格和制表符
-                        num_str = re.sub(r'\s+', '', line)
+                        # 去除所有空格和制表符（使用预编译正则）
+                        num_str = WHITESPACE_PATTERN.sub('', line)
                         if num_str.isdigit():
                             numbers.append(int(num_str))
 
@@ -123,7 +133,11 @@ def get_total_pages(html: str) -> int:
     Returns:
         总页数
     """
-    soup = BeautifulSoup(html, 'html.parser')
+    # 使用 lxml 解析器
+    try:
+        soup = BeautifulSoup(html, 'lxml')
+    except:
+        soup = BeautifulSoup(html, 'html.parser')
 
     # 查找所有分页链接
     pagination_links = soup.select('ul.pagination li a[href*="/hot/"]')
@@ -136,12 +150,12 @@ def get_total_pages(html: str) -> int:
 
         # 如果是"最後"链接，优先使用
         if '最後' in text or '»' in text:
-            match = re.search(r'/hot/(\d+)/', href)
+            match = PAGE_NUMBER_PATTERN.search(href)
             if match:
                 return int(match.group(1))
 
         # 否则，记录最大页码
-        match = re.search(r'/hot/(\d+)/', href)
+        match = PAGE_NUMBER_PATTERN.search(href)
         if match:
             page_num = int(match.group(1))
             max_page = max(max_page, page_num)
@@ -184,29 +198,62 @@ def crawl_hot_page(page_num: int = 1, retry: int = 3) -> Tuple[List[Dict], int]:
 
 
 def crawl_all_hot_pages(start_page: int = 1, end_page: Optional[int] = None,
-                       page_delay: float = 1.0) -> List[Dict]:
+                       page_delay: Optional[float] = None, task_type: str = 'update',
+                       resume: bool = True) -> List[Dict]:
     """
     爬取所有（或指定范围）热门页面的视频数据
+    支持断点续传
 
     Args:
         start_page: 起始页码（默认 1）
         end_page: 结束页码（None 表示爬到最后一页）
-        page_delay: 每页之间的延迟（秒）
+        page_delay: 每页之间的延迟（秒，None 则自动选择：优化版0.5秒，原版1.0秒）
+        task_type: 任务类型（init 或 update）
+        resume: 是否启用断点续传（默认 True）
 
     Returns:
         所有视频的列表
     """
     all_videos = []
+    tracker = ProgressTracker() if resume else None
+    task_id = None
+    pending_pages = None
+
+    # 智能延迟：优化版用0.5秒，原版用1.0秒
+    if page_delay is None:
+        page_delay = 0.5 if USE_FAST_MODE else 1.0
+
+    # 检查是否有未完成的任务（自动恢复，无需确认）
+    if tracker and resume:
+        resume_info = tracker.get_resume_info(task_type)
+        if resume_info:
+            print("=" * 80)
+            print("✓ 发现未完成的任务，自动从断点继续")
+            print("=" * 80)
+            print(f"  任务ID: {resume_info['task_id']}")
+            print(f"  已完成: {resume_info['completed']}/{resume_info['total']} 页")
+            print(f"  进度: {resume_info['progress']:.1f}%")
+            print(f"  最后更新: {resume_info['last_update']}")
+
+            if resume_info['failed']:
+                print(f"  失败页码: {resume_info['failed']}")
+
+            task_id = resume_info['task_id']
+            pending_pages = resume_info['pending']
+            print("")
 
     # 先爬第一页获取总页数
-    print("=" * 80)
-    print("开始爬取热门视频数据")
-    print("=" * 80)
+    if not task_id:
+        print("\n" + "=" * 80)
+        print("开始爬取热门视频数据")
+        print("=" * 80)
 
     first_page_videos, total_pages = crawl_hot_page(1, retry=5)
 
     if total_pages == 0:
         print("❌ 无法获取总页数，爬取失败")
+        if tracker and task_id:
+            tracker.fail_task(task_id, "无法获取总页数")
         return []
 
     print(f"\n✓ 总页数: {total_pages:,}")
@@ -216,31 +263,59 @@ def crawl_all_hot_pages(start_page: int = 1, end_page: Optional[int] = None,
     else:
         end_page = min(end_page, total_pages)
 
-    # 如果起始页是 1，使用已经爬取的数据
-    if start_page == 1:
-        all_videos.extend(first_page_videos)
-        start_page = 2
+    # 创建或继续任务
+    if not task_id and tracker:
+        task_id = tracker.start_task(task_type, end_page)
 
-    print(f"✓ 爬取范围: 第 {start_page} 页 到 第 {end_page} 页")
-    print(f"✓ 预计视频数量: {(end_page - start_page + 1) * 24:,} 个")
-    print(f"✓ 预计耗时: {(end_page - start_page + 1) * (3 + page_delay) / 60:.1f} 分钟\n")
+    # 确定要爬取的页码列表
+    if pending_pages is not None:
+        # 断点续传：只爬未完成的页
+        pages_to_crawl = [p for p in pending_pages if start_page <= p <= end_page]
+        print(f"✓ 断点续传: 剩余 {len(pages_to_crawl)} 页待爬取")
+    else:
+        # 新任务：爬所有页
+        pages_to_crawl = list(range(start_page, end_page + 1))
+        print(f"✓ 爬取范围: 第 {start_page} 页 到 第 {end_page} 页")
+        print(f"✓ 预计视频数量: {len(pages_to_crawl) * 24:,} 个")
 
-    # 爬取剩余页面
-    for page_num in range(start_page, end_page + 1):
-        videos, _ = crawl_hot_page(page_num, retry=3)
-        all_videos.extend(videos)
+    # 使用优化版时预计耗时更少
+    avg_time_per_page = 1.5 if USE_FAST_MODE else 5.0
+    print(f"✓ 预计耗时: {len(pages_to_crawl) * (avg_time_per_page + page_delay) / 60:.1f} 分钟\n")
 
-        # 显示进度
-        progress = (page_num - start_page + 1) / (end_page - start_page + 1) * 100
-        print(f"  进度: {progress:.1f}% ({page_num}/{end_page}) | 已爬取: {len(all_videos):,} 个视频")
+    # 爬取页面
+    total_to_crawl = len(pages_to_crawl)
+    for idx, page_num in enumerate(pages_to_crawl, 1):
+        try:
+            print(f"[{idx}/{total_to_crawl}] ", end="")
+            videos, _ = crawl_hot_page(page_num, retry=3)
+            all_videos.extend(videos)
+
+            # 标记页面完成
+            if tracker and task_id:
+                tracker.update_page(task_id, page_num, success=True)
+
+            # 显示进度
+            progress = idx / total_to_crawl * 100
+            print(f"  ✓ 进度: {progress:.1f}% | 已爬取: {len(all_videos):,} 个视频")
+
+        except Exception as e:
+            print(f"  ✗ 第 {page_num} 页爬取失败: {str(e)[:50]}")
+            # 标记页面失败
+            if tracker and task_id:
+                tracker.update_page(task_id, page_num, success=False)
 
         # 延迟（避免请求过快）
-        if page_num < end_page:
+        if idx < total_to_crawl:
             time.sleep(page_delay)
 
     print("\n" + "=" * 80)
     print(f"✓ 爬取完成！共获取 {len(all_videos):,} 个视频")
     print("=" * 80)
+
+    # 标记任务完成
+    if tracker and task_id:
+        tracker.update_stats(task_id, videos_count=len(all_videos), actors_count=0)
+        tracker.complete_task(task_id)
 
     # 清理浏览器实例（如果使用优化版）
     if USE_FAST_MODE:
@@ -260,7 +335,11 @@ def extract_actors_from_video_page(html: str) -> List[Dict]:
     Returns:
         演员列表，每项包含 {actor_id, actor_name}
     """
-    soup = BeautifulSoup(html, 'html.parser')
+    # 使用 lxml 解析器
+    try:
+        soup = BeautifulSoup(html, 'lxml')
+    except:
+        soup = BeautifulSoup(html, 'html.parser')
 
     actors = []
 
