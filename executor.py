@@ -36,6 +36,15 @@ def _add_subscription(input_urls):
 
 
 def get_need_sync_video_ids(sub):
+    """
+    获取需要同步的视频 ID 集合
+
+    Args:
+        sub: 订阅列表
+
+    Returns:
+        set: 需要同步的视频 ID 集合，失败时返回空集合
+    """
     # first update cache
     cache_info = utils.get_video_ids_map_from_cache()
     try:
@@ -44,15 +53,21 @@ def get_need_sync_video_ids(sub):
             cached_video_ids = set(cache_info.get(url, set())) if cache_info else set()
             remote_video_id_set = model_crawler.get_all_video_ids(url, cached_video_ids)
             cache_info[url] = list(remote_video_id_set)
-    except Exception:
-        raise
+    except Exception as e:
+        print(f"⚠️  获取视频列表失败: {str(e)[:100]}")
+        print(f"   使用缓存数据继续...")
+        # 不要 raise，使用缓存的数据继续
     finally:
         utils.update_video_ids_cache(cache_info)
+
+    # 如果没有任何数据，返回空集合
+    if not cache_info or sub[0]['url'] not in cache_info:
+        return set()
 
     need_sync_video_ids = set(cache_info[sub[0]['url']])
     for item in sub[1:]:
         url = item['url']
-        need_sync_video_ids &= set(cache_info.get(url))
+        need_sync_video_ids &= set(cache_info.get(url, set()))
     return need_sync_video_ids
 
 
@@ -97,30 +112,47 @@ def process_subscription(args):
             print("\n===================================")
             print("  同步订阅:\t%s" % subs_name)
             print("===================================\n")
-            remote_video_id_set = get_need_sync_video_ids(subs)
-            need_sync_video_ids = remote_video_id_set - ignore_video_ids
-            need_sync_number = len(need_sync_video_ids)
-            print("该订阅远端 %s 个 / 本地已存在 %s 个 " %
-                  (len(remote_video_id_set), len(remote_video_id_set & ignore_video_ids)))
 
-            # 将 set 转换为 list 并随机打乱顺序
-            need_sync_video_list = list(need_sync_video_ids)
-            random.shuffle(need_sync_video_list)
-            print("🔀 已随机打乱下载顺序")
+            try:
+                remote_video_id_set = get_need_sync_video_ids(subs)
 
-            print("开始同步 %s 的远端视频到本地..." % '-'.join([foo['name'] for foo in subs]))
+                # 如果获取失败（返回空集合）且没有缓存，跳过这个订阅
+                if not remote_video_id_set:
+                    print("⚠️  该订阅无可用数据，跳过")
+                    continue
 
-            for index, video_id in enumerate(need_sync_video_list):
-                print("\n该订阅需同步视频 %s 个 / 剩余 %s 个 " % (need_sync_number, need_sync_number - index))
-                download_url = base_url + video_id + '/'
-                # print(download_url)
-                video_crawler.download_by_video_url(download_url)
+                need_sync_video_ids = remote_video_id_set - ignore_video_ids
+                need_sync_number = len(need_sync_video_ids)
+                print("该订阅远端 %s 个 / 本地已存在 %s 个 " %
+                      (len(remote_video_id_set), len(remote_video_id_set & ignore_video_ids)))
 
-                ignore_video_ids.add(video_id)
-                if index < len(need_sync_video_list) - 1:
-                    time.sleep(download_inerval)
+                if need_sync_number == 0:
+                    print("✓ 所有视频已下载，跳过")
+                    continue
 
-            print("订阅 %s 同步完成" % subs_name)
+                # 将 set 转换为 list 并随机打乱顺序
+                need_sync_video_list = list(need_sync_video_ids)
+                random.shuffle(need_sync_video_list)
+                print("🔀 已随机打乱下载顺序")
+
+                print("开始同步 %s 的远端视频到本地..." % '-'.join([foo['name'] for foo in subs]))
+
+                for index, video_id in enumerate(need_sync_video_list):
+                    print("\n该订阅需同步视频 %s 个 / 剩余 %s 个 " % (need_sync_number, need_sync_number - index))
+                    download_url = base_url + video_id + '/'
+                    # print(download_url)
+                    video_crawler.download_by_video_url(download_url)
+
+                    ignore_video_ids.add(video_id)
+                    if index < len(need_sync_video_list) - 1:
+                        time.sleep(download_inerval)
+
+                print("订阅 %s 同步完成" % subs_name)
+
+            except Exception as e:
+                print(f"\n✗ 订阅 {subs_name} 同步失败: {str(e)[:100]}")
+                print(f"   继续处理下一个订阅...")
+                continue
         print("\n==所有订阅同步完成==\n")
 
 
