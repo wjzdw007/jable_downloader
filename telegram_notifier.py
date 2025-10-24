@@ -1,10 +1,35 @@
 #!/usr/bin/env python3
 """
 Telegram 通知模块
+
+支持两种配置方式：
+1. 环境变量（推荐，更安全）
+   export TELEGRAM_BOT_TOKEN="your_token"
+   export TELEGRAM_CHAT_ID="your_chat_id"
+
+2. config.json 配置文件
+   {
+     "telegram": {
+       "enabled": true,
+       "bot_token": "your_token",
+       "chat_id": "your_chat_id"
+     }
+   }
+
+优先级：环境变量 > config.json
 """
 
+import os
 import requests
 from config import CONF
+
+# 尝试加载 .env 文件（如果安装了 python-dotenv）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # 自动加载 .env 文件到环境变量
+except ImportError:
+    # 没有安装 python-dotenv，跳过（仍然可以使用手动设置的环境变量）
+    pass
 
 
 def send_telegram_message(message, parse_mode='Markdown'):
@@ -19,9 +44,13 @@ def send_telegram_message(message, parse_mode='Markdown'):
         bool: 发送是否成功
     """
     telegram_config = CONF.get('telegram', {})
-    bot_token = telegram_config.get('bot_token')
-    chat_id = telegram_config.get('chat_id')
-    enabled = telegram_config.get('enabled', False)
+
+    # 优先使用环境变量（更安全）
+    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN') or telegram_config.get('bot_token')
+    chat_id = os.environ.get('TELEGRAM_CHAT_ID') or telegram_config.get('chat_id')
+
+    # 如果设置了环境变量，自动启用
+    enabled = bool(bot_token and chat_id) or telegram_config.get('enabled', False)
 
     if not enabled:
         return False

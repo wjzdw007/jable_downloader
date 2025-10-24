@@ -1,0 +1,23 @@
+{
+  "downloadVideoCover": true,
+  "downloadInterval": 0,
+  "outputDir": "./download",
+  "outputFileFormat": "id/title.mp4",
+  "proxies": {},
+  "save_vpn_traffic": false,
+  "subscriptions": [],
+  "videoIdBlockList": [],
+  "headers": {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:105.0) Gecko/20100101 Firefox/105.0",
+    "Referer": "https://jable.tv"
+  },
+  "sa_token": "",
+  "sa_mode": "browser",
+  "playwright_headless": false,
+  "chrome_path": "/opt/google/chrome/google-chrome",
+  "telegram": {
+    "enabled": false,
+    "bot_token": "YOUR_BOT_TOKEN_HERE",
+    "chat_id": "YOUR_CHAT_ID_HERE"
+  }
+}
