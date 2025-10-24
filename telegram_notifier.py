@@ -153,13 +153,19 @@ def test_telegram_notification():
     """测试 Telegram 通知配置"""
     telegram_config = CONF.get('telegram', {})
 
-    if not telegram_config.get('enabled', False):
-        print("❌ Telegram 通知未启用")
-        print("   请在 config.json 中添加 telegram 配置")
-        return False
+    # 优先使用环境变量（更安全）
+    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN') or telegram_config.get('bot_token')
+    chat_id = os.environ.get('TELEGRAM_CHAT_ID') or telegram_config.get('chat_id')
 
-    bot_token = telegram_config.get('bot_token')
-    chat_id = telegram_config.get('chat_id')
+    # 如果设置了环境变量，自动启用
+    enabled = bool(bot_token and chat_id) or telegram_config.get('enabled', False)
+
+    if not enabled:
+        print("❌ Telegram 通知未启用")
+        print("   请通过以下方式之一配置：")
+        print("   1. 设置环境变量：TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID")
+        print("   2. 在 config.json 中添加 telegram 配置")
+        return False
 
     if not bot_token:
         print("❌ 缺少 bot_token")
