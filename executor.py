@@ -1,5 +1,6 @@
 import re
 import time
+import random
 
 import config
 import model_crawler
@@ -101,16 +102,21 @@ def process_subscription(args):
             print("该订阅远端 %s 个 / 本地已存在 %s 个 " %
                   (len(remote_video_id_set), len(remote_video_id_set & ignore_video_ids)))
 
+            # 将 set 转换为 list 并随机打乱顺序
+            need_sync_video_list = list(need_sync_video_ids)
+            random.shuffle(need_sync_video_list)
+            print("🔀 已随机打乱下载顺序")
+
             print("开始同步 %s 的远端视频到本地..." % '-'.join([foo['name'] for foo in subs]))
 
-            for index, video_id in enumerate(need_sync_video_ids):
+            for index, video_id in enumerate(need_sync_video_list):
                 print("\n该订阅需同步视频 %s 个 / 剩余 %s 个 " % (need_sync_number, need_sync_number - index))
                 download_url = base_url + video_id + '/'
                 # print(download_url)
                 video_crawler.download_by_video_url(download_url)
 
                 ignore_video_ids.add(video_id)
-                if index < len(need_sync_video_ids) - 1:
+                if index < len(need_sync_video_list) - 1:
                     time.sleep(download_inerval)
 
             print("订阅 %s 同步完成" % subs_name)
