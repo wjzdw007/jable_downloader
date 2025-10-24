@@ -73,6 +73,11 @@ def send_telegram_message(message, parse_mode='Markdown'):
             return True
         else:
             print(f"⚠️  Telegram 通知发送失败: {response.status_code}")
+            try:
+                error_detail = response.json()
+                print(f"   错误详情: {error_detail}")
+            except:
+                print(f"   响应内容: {response.text}")
             return False
 
     except Exception as e:
@@ -175,6 +180,10 @@ def test_telegram_notification():
         print("❌ 缺少 chat_id")
         return False
 
+    # 显示配置信息（隐藏敏感部分）
+    print(f"✓ Bot Token: {bot_token[:10]}...{bot_token[-5:] if len(bot_token) > 15 else ''}")
+    print(f"✓ Chat ID: {chat_id}")
+    print()
     print("正在发送测试消息...")
     message = "🤖 *Jable Downloader 测试通知*\n\n"
     message += "如果你看到这条消息，说明 Telegram 通知配置成功！\n"
