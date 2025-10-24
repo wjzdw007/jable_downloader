@@ -14,6 +14,13 @@ from bs4 import BeautifulSoup
 import utils
 from config import CONF
 
+# 导入 Telegram 通知模块（如果存在）
+try:
+    from telegram_notifier import send_download_success_notification, send_download_error_notification
+    TELEGRAM_AVAILABLE = True
+except ImportError:
+    TELEGRAM_AVAILABLE = False
+
 avoid_chars = ['/', '\\', '\t', '\n', '\r']
 
 BUFFER_SIZE = 1024 * 1024 * 20  # 20MB
@@ -114,6 +121,7 @@ def mv_video_and_download_cover(output_dir, video_id, video_full_name, html_str)
 
 def download_by_video_url(url):
     video_id = url.split('/')[-2]
+    start_time = time.time()  # 记录开始时间
 
     output_dir = prepare_output_dir()
 
@@ -218,11 +226,42 @@ def download_by_video_url(url):
         print(f"  ℹ 视频未加密")
 
     print(f"[5/5] 开始下载视频片段...")
-    download_m3u8_video(ci, output_dir, ts_list, video_full_name, headers_with_referer)
+    try:
+        download_m3u8_video(ci, output_dir, ts_list, video_full_name, headers_with_referer)
 
-    print(f"正在保存文件...")
-    mv_video_and_download_cover(output_dir, video_id, video_full_name, page_str)
-    print(f"✓ 下载完成: {video_full_name}")
+        print(f"正在保存文件...")
+        mv_video_and_download_cover(output_dir, video_id, video_full_name, page_str)
+
+        # 计算文件大小和下载耗时
+        output_format = CONF.get('outputFileFormat', '')
+        if output_format == 'id/id.mp4':
+            video_path = os.path.join(output_dir, video_id, video_id + '.mp4')
+        elif output_format == 'id/title.mp4':
+            video_path = os.path.join(output_dir, video_id, video_full_name + '.mp4')
+        elif output_format == 'id.mp4':
+            video_path = os.path.join(output_dir, video_id + '.mp4')
+        else:
+            video_path = os.path.join(output_dir, video_full_name + '.mp4')
+
+        file_size = os.path.getsize(video_path) if os.path.exists(video_path) else None
+        duration = time.time() - start_time
+
+        print(f"✓ 下载完成: {video_full_name}")
+
+        # 发送 Telegram 通知
+        if TELEGRAM_AVAILABLE:
+            send_download_success_notification(video_id, video_full_name, file_size, duration)
+
+    except Exception as e:
+        duration = time.time() - start_time
+        error_msg = str(e)[:200]
+        print(f"✗ 下载失败: {error_msg}")
+
+        # 发送失败通知
+        if TELEGRAM_AVAILABLE:
+            send_download_error_notification(video_id, video_full_name, error_msg)
+
+        raise
 
 
 def scrape(ci, url, headers=None):
